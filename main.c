@@ -4,8 +4,7 @@
 
 #include "Chip8_Emulator.h"
 
-  #define CHIP8_TESTPGM_PATH "F:\\Projects\\Chip-8_Emulator\\ExamplePrograms\\Tetris.ch8"
-//#define CHIP8_TESTPGM_PATH "F:\\Projects\\Chip-8_Emulator\\ExamplePrograms\\Pong_1P.ch8"
+#define CHIP8_TESTPGM_PATH "Pong_1P.ch8"
 
 int main(void)
 {
