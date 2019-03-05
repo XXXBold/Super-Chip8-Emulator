@@ -1,0 +1,2 @@
+appicon ICON "chip8_logo.ico"
+#include "wx/msw/wx.rc"

@@ -231,8 +231,8 @@ struct TagEmulator_T
   {
     unsigned long ulKeyStates;
     unsigned long ulKeyStatesLast;
-    unsigned char ucaUsrKeyMap[0x10];
-    unsigned short ausKeyMap[0x10];
+    unsigned char ucaUsrKeyMap[EMU_KEY_COUNT];
+    unsigned short ausKeyMap[EMU_KEY_COUNT];
   }tagKeyboard;
   struct TagThreadEmu_T
   {

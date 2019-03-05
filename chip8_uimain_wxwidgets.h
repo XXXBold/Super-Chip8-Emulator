@@ -6,25 +6,7 @@
   #include <wx/wx.h>
 #endif
 
-//Define this to enable debug output for gui
-#define GUI_DEBUG_TRACE
-
-#ifdef GUI_DEBUG_TRACE
-  #define DEBUG_WXPUTS(str) wxPuts(str)
-  //Fallback if macro not defined
-  #ifndef __GNUG__
-    #define __PRETTY_FUNCTION__ "__PRETTY_FUNCTION__ not defined"
-  #endif
-#else
-  #define DEBUG_WXPUTS(str)
-#endif /* GUI_DEBUG_TRACE */
-
-class Chip8_GUI : public wxApp
-{
-public:
-  virtual bool OnInit(void);
-private:
-};
+#include "chip8_uikeymap_wxwidgets.h"
 
 class wxWinMain : public wxFrame
 {
@@ -34,8 +16,10 @@ class wxWinMain : public wxFrame
               wxWindowID id = wxID_ANY,
               const wxString& title = wxEmptyString,
               const wxPoint& pos = wxDefaultPosition,
-              const wxSize& size = wxSize( 440,250 ),
+              const wxSize& size = wxSize( 440,220 ),
               long style = wxDEFAULT_FRAME_STYLE|wxTAB_TRAVERSAL);
+
+    ~wxWinMain();
 
     bool Show(bool show=true);
 
@@ -52,6 +36,8 @@ class wxWinMain : public wxFrame
     void OnSetSpeed_1_5(wxCommandEvent& event);
     void OnSetSpeed_2_0(wxCommandEvent& event);
 
+    void OnConfigureKeymap(wxCommandEvent& event);
+
     void OnClose(wxCloseEvent& event);
 
     void SetWindowScale(unsigned int uiScale);
@@ -59,6 +45,8 @@ class wxWinMain : public wxFrame
     void OptionSetSpeed(int idCurrSpeed);
 
   private:
+    wxWinKeyMap *pWinKeymap;
+
     wxDECLARE_EVENT_TABLE();
   protected:
     wxMenuBar* mbarMain;

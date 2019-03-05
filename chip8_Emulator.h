@@ -10,8 +10,8 @@ extern "C" {
 /**
  * Initialises the emulator, pauses execution.
  *
- * @param winPosX Position X of the Emulator Screen
- * @param winPosY Position Y of the Emulator Screen
+ * @param winPosX Position X of the Emulator Screen, in Monitor coordinates.
+ * @param winPosY Position Y of the Emulator Screen, in Monitor coordinates.
  * @param winScaleFactor
  *                Window Scale Factor, 1= Original 64x32.
  *                Pass 0 for Default Scale (=5, means 320x160px).
@@ -26,7 +26,9 @@ extern "C" {
  *                Keymap[3]=EMU_KEY_D -> Map Emulator Key 3 to Keyboard key D <br>
  *                And so on <br>
  *                Pass NULL for default (0=0,1=1,..F=F) Keymap <br>
- * @param cbFunc  Callbackfunction to call when executing an Emulator Instruction.
+ * @param cbFunc  Callbackfunction to call when executing an Emulator Instruction. <br>
+ *                Do not call any chip8_ functions from this header directly within the callback, <br>
+ *                this can cause deadlocking.
  *                Pass NULL if not needed.
  * @param callbackEvents
  *                Define on which Events procFunc should be called.
@@ -37,7 +39,7 @@ extern "C" {
 int  chip8_Init(int winPosX,
                 int winPosY,
                 unsigned int winScaleFactor,
-                unsigned char *keyMap,
+                const unsigned char keyMap[EMU_KEY_COUNT],
                 pCallbackFunc cbFunc,
                 unsigned int callbackEvents);
 
@@ -49,8 +51,8 @@ void chip8_Close(void);
 
 
 /**
- * Returns the current status of the Emulator
- *
+ * Returns the current status of the Emulator.
+ * @see enum EEMulatorState in chip8_public.h file.
  * @return Emulator's state
  */
 EEmulatorState chip8_GetEmulatorState(void);
@@ -95,6 +97,17 @@ void chip8_SetEmulationSpeed(EEmulationSpeed eSpeed);
  */
 void chip8_SetPause(int pause);
 
+void chip8_SetKeymap(unsigned char *newKeymap);
+
+/**
+ * Loads a .ch8-File to the Emulator.
+ *
+ * @param pcFilePath Path to .ch8-File
+ * @param tStartAddress
+ *                   The startaddress of the first instruction to load the file to. Usually, this should be 0x200.
+ *
+ * @return o on success, nonzero on error.
+ */
 int  chip8_LoadFile(const char *pcFilePath,
                     word tStartAddress);
 

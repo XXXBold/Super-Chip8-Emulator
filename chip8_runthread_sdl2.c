@@ -272,6 +272,13 @@ int iThreadSDLUpdate_UpdateSettings_m(TagEmulator *pEmulator)
     EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_KEYPRESS_ESCAPE);
   }
 
+  /* Update of keymap needed */
+  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_KEYBOARD_KEYMAP))
+  {
+    iChip8_Keys_SetKeymap_g(&pEmulator->tagKeyboard);
+    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_KEYBOARD_KEYMAP);
+  }
+
   /* Set run */
   if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_RUN))
   {

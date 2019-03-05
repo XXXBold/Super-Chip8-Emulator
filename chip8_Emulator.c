@@ -199,7 +199,7 @@ TagEmulator tagEmulator_g;
 int chip8_Init(int winPosX,
                int winPosY,
                unsigned int winScaleFactor,
-               unsigned char *keyMap,
+               const unsigned char keyMap[EMU_KEY_COUNT],
                pCallbackFunc cbFunc,
                unsigned int callbackEvents)
 {
@@ -353,6 +353,18 @@ void chip8_SetEmulationSpeed(EEmulationSpeed eSpeed)
   EMU_UPD_SET_FLAG(&tagEmulator_g,EMU_UPDATE_SETTING_EMULATION_SPEED);
 
   /* Wait for speed to get updated */
+  while(tagEmulator_g.uiSettingsChanged)
+  {
+    ;
+  }
+}
+
+void chip8_SetKeymap(unsigned char *newKeymap)
+{
+  memcpy(tagEmulator_g.tagKeyboard.ucaUsrKeyMap,newKeymap,sizeof(tagEmulator_g.tagKeyboard.ucaUsrKeyMap)),
+
+  EMU_UPD_SET_FLAG(&tagEmulator_g,EMU_UPDATE_SETTING_KEYBOARD_KEYMAP);
+
   while(tagEmulator_g.uiSettingsChanged)
   {
     ;

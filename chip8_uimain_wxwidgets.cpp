@@ -4,20 +4,9 @@
 #endif
 
 #include "chip8_uimain_wxwidgets.h"
+#include "chip8_app_wxwidgets.h"
 #include "chip8_Emulator.h"
-
-#define APP_VERSION_MAJOR    0
-#define APP_VERSION_MINOR    1
-#define APP_DISPLAY_NAME     "Chip-8 Emulator"
-#define APP_VERSION_DEVSTATE "Beta"
-
-#define MY_WINDOW_SCALE 10u
-
-typedef struct
-{
-  unsigned int uiEvent;
-  word tOpCode;
-}TagThreadEventParam;
+#include "appconfig.h"
 
 enum
 {
@@ -32,6 +21,7 @@ enum
   MainWindow_EmuSpeed_1_0                 = 11,
   MainWindow_EmuSpeed_1_5                 = 12,
   MainWindow_EmuSpeed_2_0                 = 13,
+  MainWindow_Keymap                       = 20,
 };
 
 enum /* Other IDs */
@@ -46,9 +36,6 @@ bool browseForFile(bool openFile,
                    wxWindow *parent=NULL,
                    const wxString &defaultPath=wxEmptyString);
 
-int iEmuCBFunc_m(unsigned int event,
-                 word currOPCode);
-
 wxBEGIN_EVENT_TABLE(wxWinMain,wxFrame)
 EVT_MENU(MainWindow_About,                        wxWinMain::OnAbout)
 EVT_MENU(MainWindow_FileLoad,                     wxWinMain::OnFileLoad)
@@ -59,6 +46,8 @@ EVT_MENU(MainWindow_EmuSpeed_1_0,                 wxWinMain::OnSetSpeed_1_0)
 EVT_MENU(MainWindow_EmuSpeed_1_5,                 wxWinMain::OnSetSpeed_1_5)
 EVT_MENU(MainWindow_EmuSpeed_2_0,                 wxWinMain::OnSetSpeed_2_0)
 
+EVT_MENU(MainWindow_Keymap,                       wxWinMain::OnConfigureKeymap)
+
 //EVT_MOVE_END(                                     wxWinMain::OnWindowMove)
 
 EVT_TIMER(MainWindow_TimerID,                                wxWinMain::OnTimerTick)
@@ -68,38 +57,6 @@ EVT_THREAD(wxEVT_COMMAND_TEXT_UPDATED,  wxWinMain::OnEmuCBThread)
 EVT_CLOSE(wxWinMain::OnClose)
 wxEND_EVENT_TABLE()
 
-IMPLEMENT_APP(Chip8_GUI)
-
-wxDECLARE_APP(Chip8_GUI);
-
-bool Chip8_GUI::OnInit()
-{
-  wxWinMain *wMain;
-  int iPosX;
-  int iPosY;
-
-  if(!wxApp::OnInit())
-    return(false);
-
-  wMain = new wxWinMain(NULL,wxID_ANY,"Chip8-Emulator");
-  wMain->SetWindowScale(MY_WINDOW_SCALE);
-//wMain->GetClientPosOnScreen(&iPosX,&iPosY);
-  iPosX=200;
-  iPosY=200;
-  if(chip8_Init(iPosX,
-                iPosY,
-                MY_WINDOW_SCALE,
-                NULL,
-                iEmuCBFunc_m,
-                EMU_EVT_INSTRUCTION_ERROR | EMU_EVT_INSTRUCTION_UNKNOWN | EMU_EVT_KEYPRESS_ESCAPE))
-  {
-    DEBUG_WXPUTS("chip8_Init() failed, quit...");
-    return(false);
-  }
-  wMain->OptionSetSpeed(EMU_SPEED_1_0X);
-  wMain->Show(true);
-  return(true);
-}
 
 bool wxWinMain::Show(bool show)
 {
@@ -154,6 +111,10 @@ wxWinMain::wxWinMain(wxWindow* parent,
 
   menuOptions->Append( smenuSpeedItem );
 
+  wxMenuItem* menuItemKeymap;
+  menuItemKeymap = new wxMenuItem( menuOptions, MainWindow_Keymap, wxString( wxT("Keymap...") ) , wxEmptyString, wxITEM_NORMAL );
+  menuOptions->Append( menuItemKeymap );
+
   mbarMain->Append( menuOptions, wxT("Options") );
 
   menuHelp = new wxMenu();
@@ -168,7 +129,27 @@ wxWinMain::wxWinMain(wxWindow* parent,
   statusBar = this->CreateStatusBar( 2, wxST_SIZEGRIP, MainWindow_StatusBar );
   tTimer.SetOwner( this, MainWindow_TimerID );
 
-  this->Centre( wxBOTH );}
+  this->Centre( wxBOTH );
+
+  //Also initialise keymap window
+  this->pWinKeymap = new wxWinKeyMap(this);
+  this->SetIcon(wxICON(appicon));
+}
+
+wxWinMain::~wxWinMain()
+{
+  if(appConfig_Save(wxGetApp().appCfg))
+  {
+    wxMessageBox("appConfig_Save() failed, can't store your configuration!\n"
+                 "Config File Path is: \n"
+                 "\"" + wxString::FromAscii(appConfig_GetPath(wxGetApp().appCfg)) + "\"",
+                 "Failed to save configuration",
+                 wxOK | wxCENTER | wxICON_EXCLAMATION,
+                 this);
+  }
+  appConfig_Close(wxGetApp().appCfg);
+  this->Destroy();
+}
 
 void wxWinMain::OnSetSpeed_0_5(wxCommandEvent& WXUNUSED(event))
 {
@@ -194,14 +175,20 @@ void wxWinMain::OnSetSpeed_2_0(wxCommandEvent& WXUNUSED(event))
   this->OptionSetSpeed(EMU_SPEED_2_0X);
 }
 
+void wxWinMain::OnConfigureKeymap(wxCommandEvent& WXUNUSED(event))
+{
+  this->pWinKeymap->Show(true);
+}
+
 void wxWinMain::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   wxMessageBox(wxString::Format("Welcome to the %s!\n"
-                                "Version %d.%d (%s)",
+                                "Version %d.%d.%d (%s)",
                                 APP_DISPLAY_NAME,
                                 APP_VERSION_MAJOR,
                                 APP_VERSION_MINOR,
+                                APP_VERSION_PATCH,
                                 APP_VERSION_DEVSTATE),
                "About",
                wxOK|wxCENTER|wxICON_INFORMATION);
@@ -214,20 +201,24 @@ void wxWinMain::OnFileLoad(wxCommandEvent& WXUNUSED(event))
   if(browseForFile(true,
                    "Browse for Chip-8 File",
                    strPath,
-                   "Chip-8 File (.ch8)|*.ch8",
-                   this))
+                   "Chip-8 File (.ch8)|*.ch8|All files (*.*)|*.*",
+                   this,
+                   wxGetApp().strApp_GetLastLoadPath()))
   {
+    wxGetApp().vApp_SetLastLoadPath(strPath);
     if(chip8_LoadFile(strPath.ToAscii(),0x200))
     {
       wxPuts("chip8_LoadFile() failed");
-      this->statusBar->SetStatusText("Failed to load the file!",1);
+      wxMessageBox("Failed to load File!",
+                   "File load Error",
+                   wxOK | wxCENTER | wxICON_EXCLAMATION);
     }
     else
       this->statusBar->SetStatusText("Load file: " + strPath,1);
   }
 }
 
-void wxWinMain::OnWindowMove(wxMoveEvent& WXUNUSED(event))
+void wxWinMain::OnWindowMove(wxMoveEvent& WXUNUSED(event)) //not used atm
 {
   int iPosX, iPosY;
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
@@ -373,19 +364,4 @@ bool browseForFile(bool openFile,
     return(false);
   outPath=fileSelector.GetPath();
   return(true);
-}
-
-int iEmuCBFunc_m(unsigned int event,
-                 word currOPCode)
-{
-  wxThreadEvent tagEv(wxEVT_THREAD,wxEVT_COMMAND_TEXT_UPDATED);
-  TagThreadEventParam tagParam;
-
-  tagParam.tOpCode=currOPCode;
-  tagParam.uiEvent=event;
-//DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-
-  tagEv.SetPayload(tagParam);
-  wxQueueEvent(wxGetApp().GetTopWindow()->GetEventHandler(),tagEv.Clone());
-  return(0);
 }
