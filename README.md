@@ -1,7 +1,7 @@
 # Chip8Emulator
 Emulator for Chip-8 Applications using SDL2 and wxWidgets.
 
-Current status: WIP, tested on Windows, Beta release available for WINdows (64-bit).
+Current status: WIP, tested on Windows, Beta release binary available for Windows (64-bit).
 
 For getting some roms, refer to e.g. https://github.com/dmatlack/chip8/tree/master/roms or turn on your prefered search engine to tell you where's more ;)
 
