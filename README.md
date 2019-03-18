@@ -5,6 +5,16 @@ Current status: WIP, tested on Windows, Beta release binary available for Window
 
 For getting some roms, refer to e.g. https://github.com/dmatlack/chip8/tree/master/roms or turn on your prefered search engine to tell you where's more ;)
 
+## Releases
+- 0.1: First Release
+- 0.2-beta: Added Superchip instructions
+
+## TODOs
+- Better files organization
+- Build for Linux
+- Add build instructions
+- More code cleanup
+
 ## Credits & References
 - SDL2 Library: https://www.libsdl.org/
 - wxWidgets Library: http://www.wxwidgets.org/
