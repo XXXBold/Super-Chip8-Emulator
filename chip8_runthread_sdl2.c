@@ -18,6 +18,8 @@ enum
 
 int iThread_EmuProcess_m(void* data);
 int iThread_SDLUpdate_m(void* data);
+void vChip8_RunThread_LockScreen_m(TagEmulator *pEmulator,
+                                   int iLock);
 INLINE_PROT int iThreadEmu_UpdateSettings_m(TagEmulator *pSettings,
                                             Uint64 *pExecDelayPerfCounts);
 
@@ -38,25 +40,25 @@ const char *pcChip8_GetErrorText(int iErrorcode)
 {
   switch(iErrorcode)
   {
-    case ERR_NONE:
+    case RET_CHIP8_OPCODE_OK:
       return("No Error");
-    case ERR_INVALID_JUMP_ADDRESS:
+    case RET_ERR_INVALID_JUMP_ADDRESS:
       return("Address invalid, not in Userspace");
-    case ERR_MEM_WOULD_OVERFLOW:
+    case RET_ERR_MEM_WOULD_OVERFLOW:
       return("Can't perform operation, memory would overflow");
-    case ERR_FONT_OUT_OF_INDEX:
+    case RET_ERR_FONT_OUT_OF_INDEX:
       return("Font index out of Range, use 0-F");
-    case ERR_SCREEN_X_OVERFLOW:
+    case RET_ERR_SCREEN_DRAWPOS_INVALID:
       return("Draw X Coordinate overflow");
-    case ERR_SCREEN_DRAW:
+    case RET_ERR_SCREEN_DRAW:
       return("Draw operation failed");
-    case ERR_STACK_MAX_CALLS:
+    case RET_ERR_STACK_MAX_CALLS:
       return("Max Stack depth reached, can't step one more");
-    case ERR_STACK_ON_TOP:
+    case RET_ERR_STACK_ON_TOP:
       return("Stack is on top, can't jump up");
-    case ERR_KEYCODE_INVALID:
+    case RET_ERR_KEYCODE_INVALID:
       return("Keycode not valid");
-    case ERR_INSTRUCTION_UNKNOWN:
+    case RET_ERR_INSTRUCTION_UNKNOWN:
       return("Instruction code unknown");
     default:
       return("Unknown Error");
@@ -66,6 +68,12 @@ const char *pcChip8_GetErrorText(int iErrorcode)
 int iChip8_RunThread_Init_g(TagEmulator *pEmulator)
 {
   TRACE_DBG_INFO("Initialise RunThread...");
+  pEmulator->tagThrdEmu.eEmuState=EMU_STATE_INACTIVE;
+  pEmulator->tagThrdEmu.eSpeed=EMU_SPEED_1_0X;
+
+  pEmulator->tagThrdRenderer.eThreadState=THREAD_UPDATE_STATE_INACTIVE;
+  pEmulator->tagWindow.lockScreen=vChip8_RunThread_LockScreen_m;
+
   if(!(pEmulator->pMutex=SDL_CreateMutex()))
   {
     TRACE_DBG_ERROR_VARG("SDL_CreateMutex() failed: %s",SDL_GetError());
@@ -105,11 +113,20 @@ void vChip8_RunThread_Close_g(TagEmulator *pEmulator)
     return;
 
   TRACE_DBG_INFO("Request Runthread to Terminate");
-  EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_QUIT);
+  pEmulator->updateSettings.threadEmu_Quit=1;
   TRACE_DBG_INFO("Waiting for threads to end...");
   SDL_WaitThread(pEmulator->tagThrdEmu.pThread,NULL);
   SDL_WaitThread(pEmulator->tagThrdRenderer.pThread,NULL);
   SDL_DestroyMutex(pEmulator->pMutex);
+}
+
+void vChip8_RunThread_LockScreen_m(TagEmulator *pEmulator,
+                                   int iLock)
+{
+  if(iLock)
+    SDL_LockMutex(pEmulator->pMutex);
+  else
+    SDL_UnlockMutex(pEmulator->pMutex);
 }
 
 INLINE_FCT int iThreadEmu_UpdateSettings_m(TagEmulator *pEmulator,
@@ -117,7 +134,7 @@ INLINE_FCT int iThreadEmu_UpdateSettings_m(TagEmulator *pEmulator,
 {
   int iRc=EMU_SET_OPTION_OK;
   SDL_LockMutex(pEmulator->pMutex);
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_EMULATION_SPEED))
+  if(pEmulator->updateSettings.emu_ExecSpeed)
   {
     switch(pEmulator->tagThrdEmu.eSpeed)
     {
@@ -139,29 +156,29 @@ INLINE_FCT int iThreadEmu_UpdateSettings_m(TagEmulator *pEmulator,
         *pExecDelayPerfCounts=SDL_GetPerformanceFrequency() / CHIP8_FREQ_RUN_HZ + 0.5;
         iRc=EMU_SET_OPTION_CHANGED;
     }
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_EMULATION_SPEED);
+    pEmulator->updateSettings.emu_ExecSpeed=0;
   }
 
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_RUN))
+  if(pEmulator->updateSettings.threadEmu_Run)
   {
     pEmulator->tagThrdEmu.eEmuState=EMU_STATE_RUN;
     /* Flag update thread to run */
-    EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_RUN);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_RUN);
+    pEmulator->updateSettings.threadUpdate_Run=1;
+    pEmulator->updateSettings.threadEmu_Run=0;
   }
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_PAUSE))
+  if(pEmulator->updateSettings.threadEmu_Pause)
   {
     pEmulator->tagThrdEmu.eEmuState=EMU_STATE_PAUSE;
     /* Flag update thread to pause */
-    EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_PAUSE);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_PAUSE);
+    pEmulator->updateSettings.threadUpdate_Pause=1;
+    pEmulator->updateSettings.threadEmu_Pause=0;
   }
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_QUIT))
+  if(pEmulator->updateSettings.threadEmu_Quit)
   {
     pEmulator->tagThrdEmu.eEmuState=EMU_STATE_QUIT;
     /* Flag update thread to quit */
-    EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_QUIT);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_RUNTHREAD_QUIT);
+    pEmulator->updateSettings.threadUpdate_Quit=1;
+    pEmulator->updateSettings.threadEmu_Quit=0;
   }
   SDL_UnlockMutex(pEmulator->pMutex);
   return(iRc);
@@ -178,7 +195,7 @@ int iThread_EmuProcess_m(void* data)
 
   TRACE_DBG_INFO("iThread_EmuProcess_m(): started, waitng for Updatethread to init...");
   uiExecutionsCount=0;
-  EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_EMULATION_SPEED);
+  pEmulator->updateSettings.emu_ExecSpeed=1;
   iThreadEmu_UpdateSettings_m(pEmulator,&uiPFCProcessDelay);
   for(iRc=0;iRc<10;++iRc) /* Wait for SDL_Updatethread to init successful, else quit */
   {
@@ -189,7 +206,7 @@ int iThread_EmuProcess_m(void* data)
   if(pEmulator->tagThrdRenderer.eThreadState!=THREAD_UPDATE_STATE_PAUSED)
   {
     TRACE_DBG_ERROR("iThread_EmuProcess_m(): timeout waiting for Updatethread to init, aborting...");
-    EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_QUIT);
+    pEmulator->updateSettings.threadUpdate_Quit=1;
     pEmulator->tagThrdEmu.eEmuState=EMU_STATE_QUIT;
     return(-1);
   }
@@ -219,16 +236,27 @@ int iThread_EmuProcess_m(void* data)
         uiLastExecTime=uiPFCCurrent;
         switch(iRc)
         {
-          case ERR_NONE: /* No error, continue... */
+          case RET_CHIP8_OPCODE_OK: /* No error, continue... */
             ++uiExecutionsCount;
-            EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_INSTRUCTION_EXECUTED);
+            EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_CHIP8_INSTRUCTION_EXECUTED);
+            break;
+#ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
+          case RET_SUCHIP_OPCODE_OK:
+            ++uiExecutionsCount;
+            EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED);
+            break;
+#endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
+          case RET_PGM_EXIT:
+            TRACE_DBG_INFO("Exit requested by rom, pausing thread...");
+            pEmulator->updateSettings.threadEmu_Pause=1;
+            EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_PROGRAM_EXIT);
             break;
           default: /* Some error occured, stop execution */
             TRACE_DBG_ERROR_VARG("Execute Instruction (0x%.4X) Error: %d: %s\n",pEmulator->tCurrOPCode,iRc,pcChip8_GetErrorText(iRc));
             pEmulator->tagThrdEmu.eEmuState=EMU_STATE_ERROR_INSTRUCTION;
             /* Also signal the updatethread to pause */
-            EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_PAUSE);
-            if(iRc==ERR_INSTRUCTION_UNKNOWN)
+            pEmulator->updateSettings.threadUpdate_Pause=1;
+            if(iRc==RET_ERR_INSTRUCTION_UNKNOWN)
             {
               EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_INSTRUCTION_UNKNOWN);
             }
@@ -246,8 +274,10 @@ int iThread_EmuProcess_m(void* data)
       case EMU_STATE_QUIT: /* Handled outside switch */
         break;
       default:
-        TRACE_DBG_ERROR_VARG("iThreadFunction_m() unknown Thread Ctrl enum (%d), pausing...",pEmulator->tagThrdEmu.eEmuState);
+        TRACE_DBG_ERROR_VARG("iThreadFunction_m() invalid Thread Ctrl enum (%d), pausing...",pEmulator->tagThrdEmu.eEmuState);
         pEmulator->tagThrdEmu.eEmuState=EMU_STATE_PAUSE;
+        pEmulator->updateSettings.threadUpdate_Pause=1;
+
     }
     /* Quit Loop here */
     if(pEmulator->tagThrdEmu.eEmuState==EMU_STATE_QUIT)
@@ -265,6 +295,8 @@ int iThreadSDLUpdate_UpdateSettings_m(TagEmulator *pEmulator)
 {
   int iRc=EMU_SET_OPTION_OK;
   SDL_LockMutex(pEmulator->pMutex);
+
+  /* Check for ESC-Key pressed (Only call once per activation) */
   if((pEmulator->tagKeyboard.ulKeyStates&EMU_KEY_MASK_ESC) &&
      (!(pEmulator->tagKeyboard.ulKeyStatesLast&EMU_KEY_MASK_ESC)))
   {
@@ -273,35 +305,39 @@ int iThreadSDLUpdate_UpdateSettings_m(TagEmulator *pEmulator)
   }
 
   /* Update of keymap needed */
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_KEYBOARD_KEYMAP))
+  if(pEmulator->updateSettings.keyboard_Keymap)
   {
     iChip8_Keys_SetKeymap_g(&pEmulator->tagKeyboard);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_KEYBOARD_KEYMAP);
+    pEmulator->updateSettings.keyboard_Keymap=0;
   }
 
+  /**
+   * Check for Thread status updates
+   */
   /* Set run */
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_RUN))
+  if(pEmulator->updateSettings.threadUpdate_Run)
   {
     pEmulator->tagThrdRenderer.eThreadState=THREAD_UPDATE_STATE_ACTIVE;
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_RUN);
+    pEmulator->updateSettings.threadUpdate_Run=0;
   }
   /* Set pause */
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_PAUSE))
+  if(pEmulator->updateSettings.threadUpdate_Pause)
   {
     vChip8_Sound_Stop_g(&pEmulator->tagPlaySound);
     pEmulator->tagThrdRenderer.eThreadState=THREAD_UPDATE_STATE_PAUSED;
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_PAUSE);
+    pEmulator->updateSettings.threadUpdate_Pause=0;
   }
   /* quit thread */
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_QUIT))
+  if(pEmulator->updateSettings.threadUpdate_Quit)
   {
     pEmulator->tagThrdRenderer.eThreadState=THREAD_UPDATE_STATE_QUIT;
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_UPDATETHREAD_QUIT);
+    pEmulator->updateSettings.threadUpdate_Quit=0;
   }
+
   /**
-   * Screen updates
+   * check for Screen updates
    */
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_SCALE))
+  if(pEmulator->updateSettings.screen_Scale)
   {
     if(iChip8_Screen_SetScale_g(&pEmulator->tagWindow))
     {
@@ -309,30 +345,40 @@ int iThreadSDLUpdate_UpdateSettings_m(TagEmulator *pEmulator)
       iRc=EMU_SET_OPTION_ERROR;
     }
     else /* Clear screen on resize */
-      EMU_UPD_SET_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_CLEAR);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_SCALE);
+      pEmulator->updateSettings.screen_Clear=1;
+    pEmulator->updateSettings.screen_Scale=0;
   }
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_POS))
+  if(pEmulator->updateSettings.screen_Pos)
   {
     vChip8_Screen_SetWinPosition_g(&pEmulator->tagWindow);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_POS);
+    pEmulator->updateSettings.screen_Pos=0;
   }
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_SHOW))
+  if(pEmulator->updateSettings.screen_Show)
   {
     vChip8_Screen_Show_g(&pEmulator->tagWindow,1);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_SHOW);
+    pEmulator->updateSettings.screen_Show=0;
   }
-  if(EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_HIDE))
+  if(pEmulator->updateSettings.screen_Hide)
   {
     vChip8_Screen_Show_g(&pEmulator->tagWindow,0);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_HIDE);
+    pEmulator->updateSettings.screen_Hide=0;
   }
-  if((pEmulator->tagWindow.iVisible) && (EMU_UPD_CHK_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_CLEAR)))
+  if((pEmulator->tagWindow.data.visible) && (pEmulator->updateSettings.screen_Clear))
   {
     vChip8_Screen_Clear_g(&pEmulator->tagWindow);
-    EMU_UPD_RST_FLAG(pEmulator,EMU_UPDATE_SETTING_SCREEN_CLEAR);
+    pEmulator->updateSettings.screen_Clear=0;
   }
-
+  if(pEmulator->updateSettings.screen_ExMode_En)
+  {
+    if(iChip8_Screen_ExMode_Enable(&pEmulator->tagWindow))
+      iRc=EMU_SET_OPTION_ERROR;
+    pEmulator->updateSettings.screen_ExMode_En=0;
+  }
+  if(pEmulator->updateSettings.screen_ExMode_Dis)
+  {
+    vChip8_Screen_ExMode_Disable(&pEmulator->tagWindow);
+    pEmulator->updateSettings.screen_ExMode_Dis=0;
+  }
   SDL_UnlockMutex(pEmulator->pMutex);
   return(iRc);
 }
@@ -370,6 +416,7 @@ int iThread_SDLUpdate_m(void* data)
   {
     TRACE_DBG_ERROR("Some Errors occured in iChip8_Keys_SetKeymap_g()");
   }
+  /* Calculate Delay with Monitor frequency, to make it work like VSync */
   uiPFCDelay=(SDL_GetPerformanceFrequency()/pEmulator->tagWindow.iMonitorHz)+0.5;
 
   pEmulator->tagThrdRenderer.eThreadState=THREAD_UPDATE_STATE_PAUSED;
@@ -389,10 +436,12 @@ int iThread_SDLUpdate_m(void* data)
           SDL_Delay(2); /* Delay for CPU usage reduction */
         }
         uiLastExecTime=uiPFCCurrent;
-        vChip8_Screen_Draw_g(&pEmulator->tagWindow,&pEmulator->taChipMemory[OFF_ADDR_SCREEN_START]);
+        SDL_LockMutex(pEmulator->pMutex);
+        vChip8_Screen_Draw_g(&pEmulator->tagWindow);
+        SDL_UnlockMutex(pEmulator->pMutex);
         break;
       case THREAD_UPDATE_STATE_PAUSED:
-        SDL_Delay(20);
+        SDL_Delay(20); /* Relax while paused */
         break;
       case THREAD_UPDATE_STATE_ERROR:
         TRACE_DBG_ERROR("iThread_SDLUpdate_m(): Error, Pausing...");

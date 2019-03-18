@@ -10,7 +10,7 @@
 #include "appconfig.h"
 
 //Define this to enable debug output for gui
-#define GUI_DEBUG_TRACE
+  #define GUI_DEBUG_TRACE
 
 #ifdef GUI_DEBUG_TRACE
   #define DEBUG_WXPUTS(str) wxPuts(str)
@@ -22,11 +22,13 @@
   #define DEBUG_WXPUTS(str)
 #endif /* GUI_DEBUG_TRACE */
 
-#define APP_VERSION_MAJOR    0
-#define APP_VERSION_MINOR    1
-#define APP_VERSION_PATCH    0
-#define APP_DISPLAY_NAME     "Chip-8_Emulator"
-#define APP_VERSION_DEVSTATE "Beta"
+#define APP_VERSION_MAJOR     0
+#define APP_VERSION_MINOR     2
+#define APP_VERSION_PATCH     0
+#define APP_DISPLAY_NAME      "Chip-8_Emulator"
+#define APP_VERSION_DEVSTATE  "Beta"
+#define APP_PROJECT_HOMEPAGE  "https://github.com/XXXBold/Chip8Emulator"
+#define APP_PROJECT_DEVELOPER "XXXBold"
 
 #define MY_WINDOW_SCALE 10u
 

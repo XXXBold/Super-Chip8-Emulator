@@ -12,6 +12,8 @@ int iChip8_Sound_Init_g(TagPlaySound *pSoundData)
   unsigned int uiIndex;
   unsigned int uiWaveGen;
   TRACE_DBG_INFO("Initialise Sound...");
+  pSoundData->iSoundPlaying=0;
+
   if(SDL_InitSubSystem(SDL_INIT_AUDIO))
   {
     TRACE_DBG_ERROR_VARG("SDL_InitSubSystem() failed: %s",SDL_GetError());
@@ -53,7 +55,6 @@ int iChip8_Sound_Init_g(TagPlaySound *pSoundData)
       break;
     pSoundData->caSoundBuffer[uiIndex]=(uiIndex%(uiWaveGen)<(uiWaveGen)/2)?EMU_PLAYSOUND_AMPLITUDE:-EMU_PLAYSOUND_AMPLITUDE;
   }
-  pSoundData->iSoundPlaying=0;
   pSoundData->uiUsedSoundSize=uiIndex;
   return(0);
 }

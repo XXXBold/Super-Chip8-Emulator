@@ -38,7 +38,7 @@ extern "C" {
  */
 int  chip8_Init(int winPosX,
                 int winPosY,
-                unsigned int winScaleFactor,
+                unsigned char winScaleFactor,
                 const unsigned char keyMap[EMU_KEY_COUNT],
                 pCallbackFunc cbFunc,
                 unsigned int callbackEvents);
@@ -64,7 +64,7 @@ EEmulatorState chip8_GetEmulatorState(void);
  * @param windowScale
  *               New Scale Factor. Must fit your monitor.
  */
-void chip8_SetWindowScale(unsigned int windowScale);
+void chip8_SetWindowScale(unsigned char windowScale);
 
 
 /**
@@ -97,7 +97,12 @@ void chip8_SetEmulationSpeed(EEmulationSpeed eSpeed);
  */
 void chip8_SetPause(int pause);
 
-void chip8_SetKeymap(unsigned char *newKeymap);
+/**
+ * Set a new Keymap.
+ *
+ * @param newKeymap The new Keymap to be used, see description on chip8_Init() for details.
+ */
+void chip8_SetKeymap(unsigned char newKeymap[EMU_KEY_COUNT]);
 
 /**
  * Loads a .ch8-File to the Emulator.

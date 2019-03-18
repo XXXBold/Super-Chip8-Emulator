@@ -46,7 +46,7 @@ bool Chip8_GUI::OnInit()
                 MY_WINDOW_SCALE,
                 this->ucaKeymap,
                 iEmuCBFunc_m,
-                EMU_EVT_INSTRUCTION_ERROR | EMU_EVT_INSTRUCTION_UNKNOWN | EMU_EVT_KEYPRESS_ESCAPE))
+                EMU_EVT_INSTRUCTION_ERROR | EMU_EVT_INSTRUCTION_UNKNOWN | EMU_EVT_KEYPRESS_ESCAPE | EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED))
   {
     DEBUG_WXPUTS("chip8_Init() failed, quit...");
     return(false);

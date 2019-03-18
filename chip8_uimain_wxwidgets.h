@@ -37,6 +37,7 @@ class wxWinMain : public wxFrame
     void OnSetSpeed_2_0(wxCommandEvent& event);
 
     void OnConfigureKeymap(wxCommandEvent& event);
+    void OnDumpScreen(wxCommandEvent& event);
 
     void OnClose(wxCloseEvent& event);
 

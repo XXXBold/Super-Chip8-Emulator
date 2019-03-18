@@ -1,6 +1,7 @@
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
   #include <wx/wx.h>
+  #include <wx/aboutdlg.h>
 #endif
 
 #include "chip8_uimain_wxwidgets.h"
@@ -22,6 +23,7 @@ enum
   MainWindow_EmuSpeed_1_5                 = 12,
   MainWindow_EmuSpeed_2_0                 = 13,
   MainWindow_Keymap                       = 20,
+  MainWindow_DumpScreen
 };
 
 enum /* Other IDs */
@@ -47,10 +49,11 @@ EVT_MENU(MainWindow_EmuSpeed_1_5,                 wxWinMain::OnSetSpeed_1_5)
 EVT_MENU(MainWindow_EmuSpeed_2_0,                 wxWinMain::OnSetSpeed_2_0)
 
 EVT_MENU(MainWindow_Keymap,                       wxWinMain::OnConfigureKeymap)
+EVT_MENU(MainWindow_DumpScreen,                   wxWinMain::OnDumpScreen)
 
 //EVT_MOVE_END(                                     wxWinMain::OnWindowMove)
 
-EVT_TIMER(MainWindow_TimerID,                                wxWinMain::OnTimerTick)
+EVT_TIMER(MainWindow_TimerID,                     wxWinMain::OnTimerTick)
 
 EVT_THREAD(wxEVT_COMMAND_TEXT_UPDATED,  wxWinMain::OnEmuCBThread)
 
@@ -115,6 +118,10 @@ wxWinMain::wxWinMain(wxWindow* parent,
   menuItemKeymap = new wxMenuItem( menuOptions, MainWindow_Keymap, wxString( wxT("Keymap...") ) , wxEmptyString, wxITEM_NORMAL );
   menuOptions->Append( menuItemKeymap );
 
+  wxMenuItem* menuItemDumpScreen;
+  menuItemDumpScreen = new wxMenuItem( menuOptions, MainWindow_DumpScreen, wxString( wxT("Dump Screen") ) , wxEmptyString, wxITEM_NORMAL );
+  menuOptions->Append( menuItemDumpScreen );
+
   mbarMain->Append( menuOptions, wxT("Options") );
 
   menuHelp = new wxMenu();
@@ -126,7 +133,7 @@ wxWinMain::wxWinMain(wxWindow* parent,
 
   this->SetMenuBar( mbarMain );
 
-  statusBar = this->CreateStatusBar( 2, wxST_SIZEGRIP, MainWindow_StatusBar );
+  statusBar = this->CreateStatusBar( 2, wxSTB_SIZEGRIP, MainWindow_StatusBar );
   tTimer.SetOwner( this, MainWindow_TimerID );
 
   this->Centre( wxBOTH );
@@ -180,18 +187,30 @@ void wxWinMain::OnConfigureKeymap(wxCommandEvent& WXUNUSED(event))
   this->pWinKeymap->Show(true);
 }
 
+void wxWinMain::OnDumpScreen(wxCommandEvent& WXUNUSED(event))
+{
+  chip8_DumpScreen();
+}
+
 void wxWinMain::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
+  wxAboutDialogInfo wAbout;
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  wxMessageBox(wxString::Format("Welcome to the %s!\n"
-                                "Version %d.%d.%d (%s)",
-                                APP_DISPLAY_NAME,
-                                APP_VERSION_MAJOR,
-                                APP_VERSION_MINOR,
-                                APP_VERSION_PATCH,
-                                APP_VERSION_DEVSTATE),
-               "About",
-               wxOK|wxCENTER|wxICON_INFORMATION);
+
+  wAbout.SetName(APP_DISPLAY_NAME);
+  wAbout.SetVersion(wxString::Format("Version %d.%d.%d (%s)",
+                                     APP_VERSION_MAJOR,
+                                     APP_VERSION_MINOR,
+                                     APP_VERSION_PATCH,
+                                     APP_VERSION_DEVSTATE));
+  wAbout.SetDescription("Welcome to this Emulator!\n"
+                        "Here you can Emulate Chip-8 and Superchip Games.\n"
+                        "Check out the Website for more Information and Updates.\n");
+  wAbout.SetCopyright("(C) 2018-2019 by XXXBold");
+  wAbout.SetWebSite(APP_PROJECT_HOMEPAGE);
+  wAbout.AddDeveloper(APP_PROJECT_DEVELOPER);
+
+  wxAboutBox(wAbout,this);
 }
 
 void wxWinMain::OnFileLoad(wxCommandEvent& WXUNUSED(event))
@@ -259,13 +278,27 @@ void wxWinMain::OnEmuCBThread(wxThreadEvent& event)
       chip8_SetWindowVisible(0);
       break;
 
-    case EMU_EVT_INSTRUCTION_EXECUTED:
+    case EMU_EVT_CHIP8_INSTRUCTION_EXECUTED:
+      break;
+
+    case EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED:
+      wxPuts("SUPERCHIP INSTRUCTION!");
       break;
 
     case EMU_EVT_INSTRUCTION_UNKNOWN:
+      wxMessageBox(wxString::Format("Instruction unknown, OPCode: 0x%.4X!",tagData.tOpCode),
+                   "Emulation Error",
+                   wxOK | wxCENTER | wxICON_EXCLAMATION,
+                   this);
+      chip8_SetWindowVisible(0);
       break;
 
     case EMU_EVT_INSTRUCTION_ERROR:
+      wxMessageBox(wxString::Format("Instruction Error, can't process OPCode: 0x%.4X!",tagData.tOpCode),
+                   "Emulation Error",
+                   wxOK | wxCENTER | wxICON_EXCLAMATION,
+                   this);
+      chip8_SetWindowVisible(0);
       break;
 
     default:

@@ -19,14 +19,33 @@
 
 #include "chip8_public.h"
 
-#define SCREEN_CALC_INDEX(x,y) ((y)*(CHIP8_SCREEN_WIDTH/8)+((x)/8))
+/**
+ * Global available macros
+ */
+#define CHIP8_SCREEN_INDEX(x,y) ((y)*(CHIP8_SCREEN_WIDTH/8)+((x)/8))
+#define SUCHIP_SCREEN_INDEX(x,y) ((y)*(SUCHIP_SCREEN_WIDTH/8)+((x)/8))
+
 
 /* Various numeric constants used for the emulator */
 enum
 {
   CHIP8_SCREEN_WIDTH           =64,
   CHIP8_SCREEN_HEIGHT          =32,
-  CHIP8_SCREEN_DEFAULT_SCALE   = 5,
+
+#ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
+  SUCHIP_SCREEN_WIDTH          =128,
+  SUCHIP_SCREEN_HEIGHT         =64,
+  SCREEN_SIZE_EXMODE           =0x400,
+#else
+  SUCHIP_SCREEN_WIDTH          =CHIP8_SCREEN_WIDTH,
+  SUCHIP_SCREEN_HEIGHT         =CHIP8_SCREEN_HEIGHT,
+  SCREEN_SIZE_EXMODE           =0x100,
+#endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
+  SCREEN_SIZE_NORMAL           =0x100,
+  EMU_SCREEN_DEFAULT_SCALE     =5,
+
+  EMU_WINDATA_MASK_VISIBLE     =0x100,
+  EMU_WINDATA_MASK_EXSCREEN    =0x1000,
 
   CHIP8_FREQ_RUN_HZ            =540,
   CHIP8_FREQ_TIMER_DELAY_HZ    =60,
@@ -59,10 +78,6 @@ enum
   EMU_KEY_MASK_ESC             =0x80000000
 };
 
-#define EMU_UPD_SET_FLAG(emu,flag) ((emu)->uiSettingsChanged)|=flag
-#define EMU_UPD_CHK_FLAG(emu,flag) (((emu)->uiSettingsChanged)&flag)
-#define EMU_UPD_RST_FLAG(emu,flag) (((emu)->uiSettingsChanged)&=~(flag))
-
 typedef enum
 {
   THREAD_UPDATE_STATE_INACTIVE,
@@ -72,86 +87,87 @@ typedef enum
   THREAD_UPDATE_STATE_ERROR,
 }ESDLUpdateThread;
 
-enum EmuSettingsUpdateFlags
+
+enum RetCodes /* Return codes from chip8_Process */
 {
-  EMU_UPDATE_SETTING_EMULATION_SPEED    = 0x000001,
-
-  EMU_UPDATE_SETTING_SCREEN_SCALE       = 0x000010,
-  EMU_UPDATE_SETTING_SCREEN_POS         = 0x000020,
-  EMU_UPDATE_SETTING_SCREEN_SHOW        = 0x000040,
-  EMU_UPDATE_SETTING_SCREEN_HIDE        = 0x000080,
-  EMU_UPDATE_SETTING_SCREEN_CLEAR       = 0x000100,
-
-  EMU_UPDATE_SETTING_RUNTHREAD_RUN      = 0x001000,
-  EMU_UPDATE_SETTING_RUNTHREAD_PAUSE    = 0x002000,
-  EMU_UPDATE_SETTING_RUNTHREAD_QUIT     = 0x004000,
-
-  EMU_UPDATE_SETTING_UPDATETHREAD_RUN   = 0x010000,
-  EMU_UPDATE_SETTING_UPDATETHREAD_PAUSE = 0x020000,
-  EMU_UPDATE_SETTING_UPDATETHREAD_QUIT  = 0x040000,
-
-  EMU_UPDATE_SETTING_KEYBOARD_KEYMAP    = 0x100000
-};
-
-enum Errors /* Return codes from emulator */
-{
-  ERR_NONE=0,
-  ERR_INVALID_JUMP_ADDRESS,
-  ERR_MEM_WOULD_OVERFLOW,
-  ERR_FONT_OUT_OF_INDEX,
-  ERR_SCREEN_X_OVERFLOW,
-  ERR_SCREEN_DRAW,
-  ERR_STACK_MAX_CALLS,
-  ERR_STACK_ON_TOP,
-  ERR_KEYCODE_INVALID,
-  ERR_INSTRUCTION_UNKNOWN,
+  RET_CHIP8_OPCODE_OK=0,
+  RET_SUCHIP_OPCODE_OK,
+  RET_PGM_EXIT,
+  RET_ERR_INVALID_JUMP_ADDRESS,
+  RET_ERR_MEM_WOULD_OVERFLOW,
+  RET_ERR_FONT_OUT_OF_INDEX,
+  RET_ERR_SCREEN_DRAWPOS_INVALID,
+  RET_ERR_SCREEN_DRAW,
+  RET_ERR_STACK_MAX_CALLS,
+  RET_ERR_STACK_ON_TOP,
+  RET_ERR_KEYCODE_INVALID,
+  RET_ERR_INSTRUCTION_UNKNOWN,
 };
 
 /**
  * Memory Map for CHIP-8 Emulator
  *
- * |-----------------| 0x0   (0)------|
- * | Program memory  |                |
- * | for sprites     |                |
- * | (reserved)      |                |
- * |                 |                |
- * |-----------------| 0x50  (80)     |
- * | unused          |                |
- * | (reserved)      |                |
- * |                 |                |
- * |-----------------| 0xFF  (255)    |
- * | Registers       |                |
- * | Program Counter | 0x100 (256)    |
- * | Stack Pointer   | 0x102 (258)    |-- 0x0 (0) - 0x1FF (511):
- * | Resgister I     | 0x104 (260)    |-- Reserved for interpreter
- * | Delay Timer     | 0x106 (262)    |
- * | Sound Timer     | 0x107 (263)    |
- * | General Purpose | 0x108 (264) -  |
- * | 8-bit Registers |                |
- * | 16x (V0-VF)     |                |
- * |                 |                |
- * |-----------------| 0x117 (279)    |
- * | unused          |                |
- * | (reserved)      |                |
- * |                 |                |
- * |-----------------| 0x1FF (511)----|
- * | Data            |                |-- 0x200 (512) - 0xE9F (3743)
- * |                 |                |-- Used for Programs
- * |-----------------| 0xE9F (3743)---|
- * | Call Stack      |                |
- * | (reserved)      |                |
- * |                 |                |-- 0xEA0 (3744) - 0xFFF (4095)
- * |-----------------| 0xEFF (3839)   |-- reserved for interpreter
- * [ Screen refresh  |                |
- * | (reserved)      |                |
- * |                 |                |
- * |-----------------| 0xFFF (4095)---|
+ * |------------------| 0x0   (0)------|
+ * | Program memory   |                |
+ * | for sprites      |                |
+ * | (reserved)       |                |
+ * |                  |                |
+ * |------------------| 0x50  (80)     |
+ * | Program memory   |                |
+ * | for sprites (Ex- |                |
+ * | tended fonts,    |                |
+ * | Superchip only)  |                |
+ * | (reserved)       |                |
+ * |                  |                |
+ * |------------------| 0xF1  (241)    |
+ * | unused           |                |
+ * | (reserved)       |                |
+ * |                  |                |
+ * |------------------| 0xFF  (255)    |
+ * | Registers        |                |
+ * |                  |                |
+ * | Program Counter  | 0x100 (256)    |
+ * |                  |                |
+ * | Stack Pointer    | 0x102 (258)    |
+ * |                  |                |
+ * | Resgister I      | 0x104 (260)    |
+ * |                  |                |
+ * | Delay Timer      | 0x106 (262)    |-- 0x0 (0) - 0x1FF (511):
+ * |                  |                |-- Reserved for Internal use
+ * | Sound Timer      | 0x107 (263)    |
+ * |                  |                |
+ * | General Purpose  | 0x108 (264) -  |
+ * | 8-bit Registers  |                |
+ * | 16x (V0-VF)      | 0x117 (279)    |
+ * |                  |                |
+ * | RPL Register,    | 0x118 (280) -  |
+ * | 8 bytes user     |                |
+ * | flags, used by   |                |
+ * | HP Calculators   |                |
+ * |                  |                |
+ * |------------------| 0x120 (288)    |
+ * | Callstack Memory |                |
+ * | For storing up   |                |
+ * | to 16 Addresses, |                |
+ * | for max. 16      |                |
+ * | nested calls.    |                |
+ * |                  |                |
+ * |------------------| 0x141 (321)----|
+ * | unused           |                |
+ * | (reserved)       |                |
+ * |                  |                |
+ * |------------------| 0x1FF (511)----|
+ * | Data             |                |-- 0x200 (512) - 0xE9F (3743)
+ * |                  |                |-- Used for Programs
+ * |------------------| 0xFFF (4095)---|
  *
  */
-enum /* Offset addresses in memory */
+enum /* Offset addresses/ sizes in memory */
 {
   OFF_ADDR_FONT_START   = 0x0,
   OFF_ADDR_FONT_END     = 0x50,
+  OFF_ADDR_XFONT_START  = OFF_ADDR_FONT_END+1,
+  OFF_ADDR_XFONT_END    = OFF_ADDR_XFONT_START+0xA0,
   OFF_REG_PC            = 0x100,
   OFF_REG_PTR_STACK     = OFF_REG_PC+sizeof(word),
   OFF_REG_I             = OFF_REG_PTR_STACK+sizeof(word),
@@ -173,13 +189,13 @@ enum /* Offset addresses in memory */
   OFF_REG_VD,
   OFF_REG_VE,
   OFF_REG_VF,
+  OFF_REG_RPL_START     = OFF_REG_VF+1,
+  OFF_REG_RPL_END       = OFF_REG_RPL_START+8,
+  OFF_ADDR_STACK_START  = OFF_REG_RPL_END+1,
+  OFF_ADDR_STACK_END    = OFF_ADDR_STACK_START+0x20,
   OFF_ADDR_USER_START   = 0x200,
-  OFF_ADDR_USER_END     = 0xE9F,
-  OFF_ADDR_STACK_START  = OFF_ADDR_USER_END+1,
-  OFF_ADDR_STACK_END    = 0xEFF,
-  OFF_ADDR_SCREEN_START = OFF_ADDR_STACK_END+1,
-  OFF_ADDR_SCREEN_END   = 0xFFF,
-  OFF_MEM_SIZE          = 0x1000 /* 4096 */
+  OFF_ADDR_USER_END     = 0xFFF,
+  OFF_MEM_SIZE          = 0x1000, /* 4096 */
 };
 
 /**
@@ -198,24 +214,51 @@ typedef struct TagThreadEmu_T      TagThreadEmu;
 typedef struct TagThreadRenderer_T TagThreadRenderer;
 
 typedef int(*processThreadFunc)(TagEmulator *pEmulator);
+typedef void(*emuLockScreen)(TagEmulator *pEmulator, int iLock);
+
+#define EMU_LOCK_SCREEN(emu)   (emu)->tagWindow.lockScreen(emu,1)
+#define EMU_UNLOCK_SCREEN(emu) (emu)->tagWindow.lockScreen(emu,0)
 
 struct TagEmulator_T
 {
   /* Volatile needed, otherwise gcc removes waitloops for optimization */
-  volatile unsigned int uiSettingsChanged;
+  volatile struct TagUpdateFlags_t
+  {
+    unsigned int emu_ExecSpeed      :1;
+    unsigned int keyboard_Keymap    :1;
+    unsigned int screen_Scale       :1;
+    unsigned int screen_Pos         :1;
+    unsigned int screen_Show        :1;
+    unsigned int screen_Hide        :1;
+    unsigned int screen_Clear       :1;
+    unsigned int screen_ExMode_En   :1;
+    unsigned int screen_ExMode_Dis  :1;
+    unsigned int threadEmu_Run      :1;
+    unsigned int threadEmu_Pause    :1;
+    unsigned int threadEmu_Quit     :1;
+    unsigned int threadUpdate_Run   :1;
+    unsigned int threadUpdate_Pause :1;
+    unsigned int threadUpdate_Quit  :1;
+  }updateSettings;
   word tCurrOPCode;
   byte taChipMemory[OFF_MEM_SIZE];
   SDL_mutex *pMutex;
   struct TagWindow_T
   {
+    byte taScreenBuffer[SCREEN_SIZE_EXMODE];
+    byte taLastScreen[SCREEN_SIZE_EXMODE];
+    emuLockScreen lockScreen;
+    struct TagWindata_t
+    {
+      unsigned int scale     :8;
+      unsigned int visible   :1;
+      unsigned int exModeOn  :1;
+    }data;
     int iPosX;
     int iPosY;
     int iMonitorWidth;
     int iMonitorHeigth;
     int iMonitorHz;
-    unsigned int uiScale;
-    int iVisible;
-    byte taLastScreen[(CHIP8_SCREEN_WIDTH/8) * CHIP8_SCREEN_HEIGHT];
     SDL_Window *pWindow;
     SDL_Renderer *pRenderer;
   }tagWindow;
@@ -252,6 +295,9 @@ struct TagEmulator_T
 
 extern TagEmulator tagEmulator_g;
 
+/**
+ * All (virtual) registers defined here, to access them directly.
+ */
 #define REG_PC        *(word*)(&tagEmulator_g.taChipMemory[OFF_REG_PC])
 #define REG_PTR_STACK *(word*)(&tagEmulator_g.taChipMemory[OFF_REG_PTR_STACK])
 #define REG_I         *(word*)(&tagEmulator_g.taChipMemory[OFF_REG_I])
@@ -277,9 +323,10 @@ extern TagEmulator tagEmulator_g;
 
 
 /* Enable/disable trace here as needed */
-#define TRACE_DEBUG_INFO
+//#define TRACE_DEBUG_INFO
 #define TRACE_DEBUG_ERROR
-#define TRACE_INSTRUCTIONS
+//#define TRACE_CHIP8_INSTRUCTIONS
+//#define TRACE_SUCHIP_INSTRUCTIONS
 
 #ifdef TRACE_DEBUG_INFO
   #define TRACE_DBG_INFO(txt)            fputs("INFO: " txt "\n", stdout)
@@ -297,11 +344,17 @@ extern TagEmulator tagEmulator_g;
   #define TRACE_DBG_ERROR_VARG(txt,...)
 #endif /* TRACE_DEBUG_ERROR */
 
-#ifdef TRACE_INSTRUCTIONS
-  #define TRACE_INSTR(txt,...)      fprintf(stdout, txt "\n",__VA_ARGS__)
+#ifdef TRACE_CHIP8_INSTRUCTIONS
+  #define TRACE_CHIP8_INSTR(txt,...)      fprintf(stdout, txt "\n",__VA_ARGS__)
 #else
-  #define TRACE_INSTR(txt,...)
-#endif /* TRACE_DEBUG_INFO */
+  #define TRACE_CHIP8_INSTR(txt,...)
+#endif /* TRACE_CHIP8_INSTRUCTIONS */
+
+#ifdef TRACE_SUCHIP_INSTRUCTIONS
+  #define TRACE_SUCHIP_INSTR(txt,...)      fprintf(stdout, txt "\n",__VA_ARGS__)
+#else
+  #define TRACE_SUCHIP_INSTR(txt,...)
+#endif /* TRACE_SUCHIP_INSTRUCTIONS */
 
 #if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* >= C99 */
   #define INLINE_FCT inline

@@ -4,6 +4,8 @@
 typedef unsigned char byte;
 typedef unsigned short word;
 
+  #define ENABLE_SUPERCHIP_INSTRUCTIONS
+
 /**
  * Callbackfunction defined by the user.
  *
@@ -12,6 +14,8 @@ typedef int(*pCallbackFunc)(unsigned int event, word opCode);
 
 enum
 {
+  EMU_QUIRK_INCREMENT_I_ON_STORAGE=0x1,
+  EMU_QUIRK_SHIFT_SOURCE_REG      =0x2,
   /**
    * Emulator has 16 Keys (0..9, A..F)
    */
@@ -69,31 +73,40 @@ enum EmuKeys
 enum UsrCBEvent
 {
   /**
-   * Calls pCallbackFunc on every Instruction which gets executed by the Emulator. <br>
+   * Calls pCallbackFunc on every Chip8-Instruction which gets executed by the Emulator. <br>
    * If using this, make sure callbacks are handled very quick, otherwise the Emulator <br>
    * could slow down in it's execution speed.
    */
-  EMU_EVT_INSTRUCTION_EXECUTED = 0x01,
+  EMU_EVT_CHIP8_INSTRUCTION_EXECUTED  = 0x0001,
+  /**
+   * Calls pCallbackFunc on every Superchip-Instruction which gets executed by the Emulator. <br>
+   * Only used when ENABLE_SUPERCHIP_INSTRUCTIONS is defined.
+   */
+  EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED = 0x0002,
+  /**
+   * (Superchip only) Calls pCallbackFunc if a program requests to terminate by itself.
+   */
+  EMU_EVT_PROGRAM_EXIT                = 0x0010,
   /**
    * Calls pCallbackFunc if the current instruction code is unknown.
    */
-  EMU_EVT_INSTRUCTION_UNKNOWN  = 0x02,
+  EMU_EVT_INSTRUCTION_UNKNOWN         = 0x0100,
   /**
    * Calls pCallbackFunc if the current Instruction code would cause an error. <br>
    * Possible Errors are e.g. Buffer overflow, Invalid values, etc.
    */
-  EMU_EVT_INSTRUCTION_ERROR    = 0x04,
+  EMU_EVT_INSTRUCTION_ERROR           = 0x0200,
 
   /**
    * Calls pCallbackFunc if Escape is pressed. This can be used to pause the Emulator, <br>
    * but do not call any chip8_ Functions directly in the callback, this could cause a deadlock.
    */
-  EMU_EVT_KEYPRESS_ESCAPE      = 0x100,
+  EMU_EVT_KEYPRESS_ESCAPE             = 0x1000,
 
   /**
    * Calls pCallbackFunc if any of the event occurs.
    */
-  EMU_EVT_ALL                  = 0xFFFF
+  EMU_EVT_ALL                         = 0xFFFF
 };
 
 

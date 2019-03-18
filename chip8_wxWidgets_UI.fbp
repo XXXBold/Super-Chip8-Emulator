@@ -187,10 +187,23 @@
                         <property name="checked">0</property>
                         <property name="enabled">1</property>
                         <property name="help"></property>
-                        <property name="id">wxID_ANY</property>
+                        <property name="id">MainWindow_Keymap</property>
                         <property name="kind">wxITEM_NORMAL</property>
                         <property name="label">Keymap...</property>
                         <property name="name">menuItemKeymap</property>
+                        <property name="permission">none</property>
+                        <property name="shortcut"></property>
+                        <property name="unchecked_bitmap"></property>
+                    </object>
+                    <object class="wxMenuItem" expanded="1">
+                        <property name="bitmap"></property>
+                        <property name="checked">0</property>
+                        <property name="enabled">1</property>
+                        <property name="help"></property>
+                        <property name="id">MainWindow_DumpScreen</property>
+                        <property name="kind">wxITEM_NORMAL</property>
+                        <property name="label">Dump Screen</property>
+                        <property name="name">menuItemDumpScreen</property>
                         <property name="permission">none</property>
                         <property name="shortcut"></property>
                         <property name="unchecked_bitmap"></property>
