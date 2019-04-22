@@ -1,17 +1,8 @@
 #ifndef CHIP8_GLOBAL_H_INCLUDED
   #define CHIP8_GLOBAL_H_INCLUDED
 
-#ifdef _WIN32
-  //TODO: windows quick wait event
-#elif __unix__
-  #include <features.h>
-  #if defined (_POSIX_C_SOURCE) && (_POSIX_C_SOURCE>=199309L)
-  #include <time.h> /* For nanosleep */
-  #else
-    #error No microsleep available for your platform
-  #endif
-#endif /* _WIN32 */
-
+#include <stdlib.h>
+#include <limits.h>
 #ifndef SDL_MAIN_HANDLED
   #define SDL_MAIN_HANDLED
 #endif /* !SDL_MAIN_HANDLED */
@@ -19,10 +10,16 @@
 
 #include "chip8_public.h"
 
+/* Enable/disable trace here as needed */
+//#define TRACE_DEBUG_INFO
+  #define TRACE_DEBUG_ERROR
+//#define TRACE_CHIP8_INSTRUCTIONS
+//#define TRACE_SUCHIP_INSTRUCTIONS
+
 /**
  * Global available macros
  */
-#define CHIP8_SCREEN_INDEX(x,y) ((y)*(CHIP8_SCREEN_WIDTH/8)+((x)/8))
+#define CHIP8_SCREEN_INDEX(x,y)  ((y)*(CHIP8_SCREEN_WIDTH/8)+((x)/8))
 #define SUCHIP_SCREEN_INDEX(x,y) ((y)*(SUCHIP_SCREEN_WIDTH/8)+((x)/8))
 
 
@@ -31,6 +28,7 @@ enum
 {
   CHIP8_SCREEN_WIDTH           =64,
   CHIP8_SCREEN_HEIGHT          =32,
+  CHIP8_SCREEN_TITLE_MAXLEN    =260,
 
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
   SUCHIP_SCREEN_WIDTH          =128,
@@ -43,9 +41,6 @@ enum
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
   SCREEN_SIZE_NORMAL           =0x100,
   EMU_SCREEN_DEFAULT_SCALE     =5,
-
-  EMU_WINDATA_MASK_VISIBLE     =0x100,
-  EMU_WINDATA_MASK_EXSCREEN    =0x1000,
 
   CHIP8_FREQ_RUN_HZ            =540,
   CHIP8_FREQ_TIMER_DELAY_HZ    =60,
@@ -96,7 +91,7 @@ enum RetCodes /* Return codes from chip8_Process */
   RET_ERR_INVALID_JUMP_ADDRESS,
   RET_ERR_MEM_WOULD_OVERFLOW,
   RET_ERR_FONT_OUT_OF_INDEX,
-  RET_ERR_SCREEN_DRAWPOS_INVALID,
+  RET_ERR_DRAW_OUT_OF_SCREEN,
   RET_ERR_SCREEN_DRAW,
   RET_ERR_STACK_MAX_CALLS,
   RET_ERR_STACK_ON_TOP,
@@ -198,69 +193,57 @@ enum /* Offset addresses/ sizes in memory */
   OFF_MEM_SIZE          = 0x1000, /* 4096 */
 };
 
-/**
- * processThreadFunc  Functionpointer to call for processing 1 instruction
- * pRegTimerDelay     Pointer to Delay timer Register
- * pRegTimerSound     Pointer to Sound Timer Register
- * iWindowScale       Scale factor for window
- * eSpeed             Speed factor
- */
-
 typedef struct TagEmulator_T       TagEmulator;
 typedef struct TagWindow_T         TagWindow;
 typedef struct TagPlaySound_T      TagPlaySound;
 typedef struct TagKeyboard_T       TagKeyboard;
 typedef struct TagThreadEmu_T      TagThreadEmu;
-typedef struct TagThreadRenderer_T TagThreadRenderer;
 
 typedef int(*processThreadFunc)(TagEmulator *pEmulator);
-typedef void(*emuLockScreen)(TagEmulator *pEmulator, int iLock);
 
-#define EMU_LOCK_SCREEN(emu)   (emu)->tagWindow.lockScreen(emu,1)
-#define EMU_UNLOCK_SCREEN(emu) (emu)->tagWindow.lockScreen(emu,0)
+#define EMU_CHECK_QUIRK(emu,quirk) ((emu)->uiQuirks&quirk)
 
 struct TagEmulator_T
 {
   /* Volatile needed, otherwise gcc removes waitloops for optimization */
   volatile struct TagUpdateFlags_t
   {
+    unsigned int emu_Run            :1;
+    unsigned int emu_Pause          :1;
+    unsigned int emu_Quit           :1;
     unsigned int emu_ExecSpeed      :1;
     unsigned int keyboard_Keymap    :1;
-    unsigned int screen_Scale       :1;
-    unsigned int screen_Pos         :1;
+    unsigned int screen_Title       :1;
     unsigned int screen_Show        :1;
     unsigned int screen_Hide        :1;
     unsigned int screen_Clear       :1;
+    unsigned int screen_Scale       :1;
+    unsigned int screen_Pos         :1;
     unsigned int screen_ExMode_En   :1;
     unsigned int screen_ExMode_Dis  :1;
-    unsigned int threadEmu_Run      :1;
-    unsigned int threadEmu_Pause    :1;
-    unsigned int threadEmu_Quit     :1;
-    unsigned int threadUpdate_Run   :1;
-    unsigned int threadUpdate_Pause :1;
-    unsigned int threadUpdate_Quit  :1;
   }updateSettings;
   word tCurrOPCode;
   byte taChipMemory[OFF_MEM_SIZE];
-  SDL_mutex *pMutex;
+  unsigned int uiQuirks;
   struct TagWindow_T
   {
     byte taScreenBuffer[SCREEN_SIZE_EXMODE];
     byte taLastScreen[SCREEN_SIZE_EXMODE];
-    emuLockScreen lockScreen;
-    struct TagWindata_t
+    struct TagWindowInfo_T
     {
+      char caTitle[CHIP8_SCREEN_TITLE_MAXLEN];
+      int iPosX;
+      int iPosY;
+      int iMonitorWidth;
+      int iMonitorHeigth;
+      int iMonitorHz;
       unsigned int scale     :8;
       unsigned int visible   :1;
       unsigned int exModeOn  :1;
-    }data;
-    int iPosX;
-    int iPosY;
-    int iMonitorWidth;
-    int iMonitorHeigth;
-    int iMonitorHz;
+    }info;
     SDL_Window *pWindow;
     SDL_Renderer *pRenderer;
+    SDL_Texture *pTexture;
   }tagWindow;
   struct TagPlaySound_T
   {
@@ -286,11 +269,6 @@ struct TagEmulator_T
     EEmulationSpeed eSpeed;
     SDL_Thread *pThread;
   }tagThrdEmu;
-  struct TagThreadRenderer_T
-  {
-    ESDLUpdateThread eThreadState;
-    SDL_Thread *pThread;
-  }tagThrdRenderer;
 };
 
 extern TagEmulator tagEmulator_g;
@@ -322,15 +300,9 @@ extern TagEmulator tagEmulator_g;
 #define REG_VF        tagEmulator_g.taChipMemory[OFF_REG_VF]
 
 
-/* Enable/disable trace here as needed */
-//#define TRACE_DEBUG_INFO
-#define TRACE_DEBUG_ERROR
-//#define TRACE_CHIP8_INSTRUCTIONS
-//#define TRACE_SUCHIP_INSTRUCTIONS
-
 #ifdef TRACE_DEBUG_INFO
-  #define TRACE_DBG_INFO(txt)            fputs("INFO: " txt "\n", stdout)
-  #define TRACE_DBG_INFO_VARG(txt,...)   fprintf(stdout,"INFO: " txt "\n",__VA_ARGS__)
+  #define TRACE_DBG_INFO(txt)            fputs("INFO: " txt "\n", stderr)
+  #define TRACE_DBG_INFO_VARG(txt,...)   fprintf(stderr,"INFO: " txt "\n",__VA_ARGS__)
 #else
   #define TRACE_DBG_INFO(txt)
   #define TRACE_DBG_INFO_VARG(txt,...)
@@ -345,13 +317,13 @@ extern TagEmulator tagEmulator_g;
 #endif /* TRACE_DEBUG_ERROR */
 
 #ifdef TRACE_CHIP8_INSTRUCTIONS
-  #define TRACE_CHIP8_INSTR(txt,...)      fprintf(stdout, txt "\n",__VA_ARGS__)
+  #define TRACE_CHIP8_INSTR(txt,...)      fprintf(stderr, txt "\n",__VA_ARGS__)
 #else
   #define TRACE_CHIP8_INSTR(txt,...)
 #endif /* TRACE_CHIP8_INSTRUCTIONS */
 
 #ifdef TRACE_SUCHIP_INSTRUCTIONS
-  #define TRACE_SUCHIP_INSTR(txt,...)      fprintf(stdout, txt "\n",__VA_ARGS__)
+  #define TRACE_SUCHIP_INSTR(txt,...)      fprintf(stderr, txt "\n",__VA_ARGS__)
 #else
   #define TRACE_SUCHIP_INSTR(txt,...)
 #endif /* TRACE_SUCHIP_INSTRUCTIONS */

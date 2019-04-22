@@ -6,7 +6,7 @@
 #include "chip8_app_wxwidgets.h"
 #include "chip8_uimain_wxwidgets.h"
 #include "chip8_uikeymap_wxwidgets.h"
-#include "chip8_Emulator.h"
+#include "chip8_emulator.h"
 #include "appconfig.h"
 
 #ifdef _WIN32
@@ -18,13 +18,26 @@
 int iEmuCBFunc_m(unsigned int event,
                  word currOPCode);
 
-IMPLEMENT_APP(Chip8_GUI)
+IMPLEMENT_APP_NO_MAIN(Chip8_GUI)
+
+int main(int argc, char *argv[])
+{
+  if(chip8_Init(200,
+                200,
+                MY_WINDOW_SCALE,
+                NULL,
+                iEmuCBFunc_m,
+                EMU_EVT_INSTRUCTION_ERROR | EMU_EVT_INSTRUCTION_UNKNOWN | EMU_EVT_KEYPRESS_ESCAPE | EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED))
+  {
+    DEBUG_WXPUTS("chip8_Init() failed, quit...");
+    return(false);
+  }
+  return(wxEntry(argc,argv));
+}
 
 bool Chip8_GUI::OnInit()
 {
   wxWinMain *wMain;
-  int iPosX;
-  int iPosY;
 
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   if(!wxApp::OnInit())
@@ -32,25 +45,15 @@ bool Chip8_GUI::OnInit()
 
   if(!this->bConfigLoad())
   {
+    DEBUG_WXPUTS("bConfigLoad() failed, quit...");
     return(false);
   }
-
+  chip8_SetKeymap(this->ucaKeymap);
   wMain = new wxWinMain(NULL,wxID_ANY,APP_DISPLAY_NAME);
 //wMain->SetWindowScale(MY_WINDOW_SCALE);
 //wMain->GetClientPosOnScreen(&iPosX,&iPosY);
   wMain->Show(true);
-  iPosX=200;
-  iPosY=200;
-  if(chip8_Init(iPosX,
-                iPosY,
-                MY_WINDOW_SCALE,
-                this->ucaKeymap,
-                iEmuCBFunc_m,
-                EMU_EVT_INSTRUCTION_ERROR | EMU_EVT_INSTRUCTION_UNKNOWN | EMU_EVT_KEYPRESS_ESCAPE | EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED))
-  {
-    DEBUG_WXPUTS("chip8_Init() failed, quit...");
-    return(false);
-  }
+
   wMain->OptionSetSpeed(EMU_SPEED_1_0X);
   return(true);
 }
@@ -58,12 +61,12 @@ bool Chip8_GUI::OnInit()
 int iEmuCBFunc_m(unsigned int event,
                  word currOPCode)
 {
+  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   wxThreadEvent tagEv(wxEVT_THREAD,wxEVT_COMMAND_TEXT_UPDATED);
   TagThreadEventParam tagParam;
 
   tagParam.tOpCode=currOPCode;
   tagParam.uiEvent=event;
-//DEBUG_WXPUTS(__PRETTY_FUNCTION__);
 
   tagEv.SetPayload(tagParam);
   wxQueueEvent(wxGetApp().GetTopWindow()->GetEventHandler(),tagEv.Clone());
@@ -86,13 +89,19 @@ void Chip8_GUI::vApp_SetKeymap(unsigned char ucaNewKeymap[EMU_KEY_COUNT])
 
 void Chip8_GUI::vApp_SetLastLoadPath(wxString& strPath)
 {
+  wxString strTmp;
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
+  if((strTmp=strPath.BeforeLast('/')) != wxEmptyString)
+    strPath=strTmp;
+  else if((strTmp=strPath.BeforeLast('\\')) != wxEmptyString)
+    strPath=strTmp;
   if(strPath.Length()>=sizeof(this->caLastFileLoadPath))
   {
-    wxPuts("Can'r set path, too long");
+    DEBUG_WXPUTS("Can't set path, too long");
     return;
   }
   strcpy(this->caLastFileLoadPath,strPath.ToAscii());
+  DEBUG_WXPUTS("Set Last Load Path to " + strPath);
 }
 
 wxString Chip8_GUI::strApp_GetLastLoadPath()
@@ -107,7 +116,7 @@ void Chip8_GUI::vGetKeymapFromConfig()
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   for(uiIndex=0;uiIndex<sizeof(this->ucaKeymap);++uiIndex)
   {
-    this->ucaKeymap[uiIndex]=this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].data.iVal;
+    this->ucaKeymap[uiIndex]=DATA_GET_INT(this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].tagData);
   }
 }
 
@@ -117,7 +126,7 @@ void Chip8_GUI::vSetKeymapToConfig()
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   for(uiIndex=0;uiIndex<sizeof(this->ucaKeymap);++uiIndex)
   {
-    this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].data.iVal=this->ucaKeymap[uiIndex];
+    DATA_SET_INT(this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].tagData,this->ucaKeymap[uiIndex]);
   }
 }
 
@@ -127,66 +136,64 @@ bool Chip8_GUI::bConfigLoad()
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
 
   strcpy(this->caLastFileLoadPath,DEFAULT_LOADFILE_PATH);
-  this->taCfgEntries[CFG_INDEX_LAST_SEL_PATH].dataType  =DATA_TYPE_STRING;
   this->taCfgEntries[CFG_INDEX_LAST_SEL_PATH].groupName =CFG_TXT_GROUP_PATHS;
   this->taCfgEntries[CFG_INDEX_LAST_SEL_PATH].keyName   =CFG_TXT_KEY_LAST_SEL_PATH;
-  this->taCfgEntries[CFG_INDEX_LAST_SEL_PATH].data.pcVal=this->caLastFileLoadPath;
-  this->taCfgEntries[CFG_INDEX_LAST_SEL_PATH].dataSize  =sizeof(this->caLastFileLoadPath);
+  DATA_SET_STRING(this->taCfgEntries[CFG_INDEX_LAST_SEL_PATH].tagData,
+                  this->caLastFileLoadPath,
+                  sizeof(this->caLastFileLoadPath));
 
   for(uiIndex=0;uiIndex<sizeof(this->ucaKeymap);++uiIndex)
   {
-    this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].groupName =CFG_TXT_GROUP_KEYMAP;
-    this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].dataType  =DATA_TYPE_INT;
-    this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].dataSize  =sizeof(int);
+    this->taCfgEntries[CFG_INDEX_KEYMAP_START+uiIndex].groupName=CFG_TXT_GROUP_KEYMAP;
   }
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x0].keyName   =CFG_TXT_KEY_KEYMAP_0;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x0].data.iVal =EMU_KEY_0;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x1].keyName   =CFG_TXT_KEY_KEYMAP_1;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x1].data.iVal =EMU_KEY_1;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x2].keyName   =CFG_TXT_KEY_KEYMAP_2;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x2].data.iVal =EMU_KEY_2;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x3].keyName   =CFG_TXT_KEY_KEYMAP_3;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x3].data.iVal =EMU_KEY_3;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x4].keyName   =CFG_TXT_KEY_KEYMAP_4;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x4].data.iVal =EMU_KEY_4;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x5].keyName   =CFG_TXT_KEY_KEYMAP_5;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x5].data.iVal =EMU_KEY_5;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x6].keyName   =CFG_TXT_KEY_KEYMAP_6;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x6].data.iVal =EMU_KEY_6;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x7].keyName   =CFG_TXT_KEY_KEYMAP_7;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x7].data.iVal =EMU_KEY_7;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x8].keyName   =CFG_TXT_KEY_KEYMAP_8;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x8].data.iVal =EMU_KEY_8;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x9].keyName   =CFG_TXT_KEY_KEYMAP_9;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0x9].data.iVal =EMU_KEY_9;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xA].keyName   =CFG_TXT_KEY_KEYMAP_A;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xA].data.iVal =EMU_KEY_A;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xB].keyName   =CFG_TXT_KEY_KEYMAP_B;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xB].data.iVal =EMU_KEY_B;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xC].keyName   =CFG_TXT_KEY_KEYMAP_C;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xC].data.iVal =EMU_KEY_C;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xD].keyName   =CFG_TXT_KEY_KEYMAP_D;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xD].data.iVal =EMU_KEY_D;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xE].keyName   =CFG_TXT_KEY_KEYMAP_E;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xE].data.iVal =EMU_KEY_E;
-
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xF].keyName   =CFG_TXT_KEY_KEYMAP_F;
-  this->taCfgEntries[CFG_INDEX_KEYMAP_START+0xF].data.iVal =EMU_KEY_F;
-
+  uiIndex=CFG_INDEX_KEYMAP_START;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_0;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_0);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_1;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_1);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_2;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_2);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_3;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_3);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_4;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_4);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_5;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_5);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_6;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_6);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_7;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_7);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_8;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_8);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_9;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_9);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_A;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_A);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_B;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_B);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_C;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_C);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_D;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_D);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_E;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_E);
+  ++uiIndex;
+  this->taCfgEntries[uiIndex].keyName   =CFG_TXT_KEY_KEYMAP_F;
+  DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_F);
   this->entriesCount=sizeof(this->taCfgEntries)/sizeof(AppConfigEntry);
 
   if(!(this->appCfg=appConfig_Load(APP_DISPLAY_NAME,this->taCfgEntries,this->entriesCount,NULL,NULL)))

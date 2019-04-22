@@ -6,7 +6,7 @@
 
 #include "chip8_uimain_wxwidgets.h"
 #include "chip8_app_wxwidgets.h"
-#include "chip8_Emulator.h"
+#include "chip8_emulator.h"
 #include "appconfig.h"
 
 enum
@@ -22,6 +22,8 @@ enum
   MainWindow_EmuSpeed_1_0                 = 11,
   MainWindow_EmuSpeed_1_5                 = 12,
   MainWindow_EmuSpeed_2_0                 = 13,
+  MainWindow_Quirk_LD_Increment_REG_I     = 15,
+  MainWindow_Quirk_Shift_Source_REG       = 16,
   MainWindow_Keymap                       = 20,
   MainWindow_DumpScreen
 };
@@ -43,10 +45,14 @@ EVT_MENU(MainWindow_About,                        wxWinMain::OnAbout)
 EVT_MENU(MainWindow_FileLoad,                     wxWinMain::OnFileLoad)
 EVT_MENU(MainWindow_FileEmuRun,                   wxWinMain::OnEmuStateSetRun)
 EVT_MENU(MainWindow_FileEmuPause,                 wxWinMain::OnEmuStateSetPause)
+
 EVT_MENU(MainWindow_EmuSpeed_0_5,                 wxWinMain::OnSetSpeed_0_5)
 EVT_MENU(MainWindow_EmuSpeed_1_0,                 wxWinMain::OnSetSpeed_1_0)
 EVT_MENU(MainWindow_EmuSpeed_1_5,                 wxWinMain::OnSetSpeed_1_5)
 EVT_MENU(MainWindow_EmuSpeed_2_0,                 wxWinMain::OnSetSpeed_2_0)
+
+EVT_MENU(MainWindow_Quirk_LD_Increment_REG_I,     wxWinMain::OnQuirkChange)
+EVT_MENU(MainWindow_Quirk_Shift_Source_REG,       wxWinMain::OnQuirkChange)
 
 EVT_MENU(MainWindow_Keymap,                       wxWinMain::OnConfigureKeymap)
 EVT_MENU(MainWindow_DumpScreen,                   wxWinMain::OnDumpScreen)
@@ -67,7 +73,6 @@ bool wxWinMain::Show(bool show)
   {
     this->tTimer.Start(200);
   }
-
   return(wxFrame::Show(show));
 }
 
@@ -114,6 +119,16 @@ wxWinMain::wxWinMain(wxWindow* parent,
 
   menuOptions->Append( smenuSpeedItem );
 
+  smenuQuirks = new wxMenu();
+  wxMenuItem* smenuQuirksItem = new wxMenuItem( menuOptions, wxID_ANY, wxT("Quirks"), wxEmptyString, wxITEM_NORMAL, smenuQuirks );
+  menuItemQuirk_LDIncrementRegI = new wxMenuItem( smenuQuirks, MainWindow_Quirk_LD_Increment_REG_I, wxString( wxT("[0xFX55,0xFX65] Increment Reg. I on LD") ) , wxEmptyString, wxITEM_CHECK );
+  smenuQuirks->Append( menuItemQuirk_LDIncrementRegI );
+
+  menuItemQuirk_ShiftSourceReg = new wxMenuItem( smenuQuirks, MainWindow_Quirk_Shift_Source_REG, wxString( wxT("[0x8X06,0x8X0E] Shift Source Register") ) , wxEmptyString, wxITEM_CHECK );
+  smenuQuirks->Append( menuItemQuirk_ShiftSourceReg );
+
+  menuOptions->Append( smenuQuirksItem );
+
   wxMenuItem* menuItemKeymap;
   menuItemKeymap = new wxMenuItem( menuOptions, MainWindow_Keymap, wxString( wxT("Keymap...") ) , wxEmptyString, wxITEM_NORMAL );
   menuOptions->Append( menuItemKeymap );
@@ -138,9 +153,7 @@ wxWinMain::wxWinMain(wxWindow* parent,
 
   this->Centre( wxBOTH );
 
-  //Also initialise keymap window
-  this->pWinKeymap = new wxWinKeyMap(this);
-  this->SetIcon(wxICON(appicon));
+  this->pWinKeymap=new wxWinKeyMap(this,wxID_ANY,"Edit Keymap");
 }
 
 wxWinMain::~wxWinMain()
@@ -182,13 +195,27 @@ void wxWinMain::OnSetSpeed_2_0(wxCommandEvent& WXUNUSED(event))
   this->OptionSetSpeed(EMU_SPEED_2_0X);
 }
 
+void wxWinMain::OnQuirkChange(wxCommandEvent& WXUNUSED(event))
+{
+  unsigned int uiQuirks=0;
+  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
+  if(this->menuItemQuirk_LDIncrementRegI->IsChecked())
+    uiQuirks|=EMU_QUIRK_INCREMENT_I_ON_STORAGE;
+  if(this->menuItemQuirk_ShiftSourceReg->IsChecked())
+    uiQuirks|=EMU_QUIRK_SHIFT_SOURCE_REG;
+
+  chip8_EnableQuirks(uiQuirks);
+}
+
 void wxWinMain::OnConfigureKeymap(wxCommandEvent& WXUNUSED(event))
 {
+  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   this->pWinKeymap->Show(true);
 }
 
 void wxWinMain::OnDumpScreen(wxCommandEvent& WXUNUSED(event))
 {
+  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
   chip8_DumpScreen();
 }
 
@@ -198,11 +225,13 @@ void wxWinMain::OnAbout(wxCommandEvent& WXUNUSED(event))
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
 
   wAbout.SetName(APP_DISPLAY_NAME);
-  wAbout.SetVersion(wxString::Format("Version %d.%d.%d (%s)",
+  wAbout.SetVersion(wxString::Format("Version %d.%d.%d (%s)\n"
+                                     "%s",
                                      APP_VERSION_MAJOR,
                                      APP_VERSION_MINOR,
                                      APP_VERSION_PATCH,
-                                     APP_VERSION_DEVSTATE));
+                                     APP_VERSION_DEVSTATE,
+                                     APP_VERSION_BUILDTIME));
   wAbout.SetDescription("Welcome to this Emulator!\n"
                         "Here you can Emulate Chip-8 and Superchip Games.\n"
                         "Check out the Website for more Information and Updates.\n");
@@ -220,20 +249,27 @@ void wxWinMain::OnFileLoad(wxCommandEvent& WXUNUSED(event))
   if(browseForFile(true,
                    "Browse for Chip-8 File",
                    strPath,
+#ifdef _WIN32
                    "Chip-8 File (.ch8)|*.ch8|All files (*.*)|*.*",
+#else
+                   "Chip-8 File (.ch8)|*.ch8|All files (*.*)|*",
+#endif /* _WIN32 */
                    this,
                    wxGetApp().strApp_GetLastLoadPath()))
   {
-    wxGetApp().vApp_SetLastLoadPath(strPath);
     if(chip8_LoadFile(strPath.ToAscii(),0x200))
     {
-      wxPuts("chip8_LoadFile() failed");
+      DEBUG_WXPUTS("chip8_LoadFile() failed");
       wxMessageBox("Failed to load File!",
                    "File load Error",
                    wxOK | wxCENTER | wxICON_EXCLAMATION);
     }
     else
+    {
       this->statusBar->SetStatusText("Load file: " + strPath,1);
+      chip8_SetWindowTitle(strPath.ToAscii());
+      wxGetApp().vApp_SetLastLoadPath(strPath);
+    }
   }
 }
 

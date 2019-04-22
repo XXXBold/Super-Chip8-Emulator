@@ -5,7 +5,7 @@
 
 #include "chip8_uikeymap_wxwidgets.h"
 #include "chip8_app_wxwidgets.h"
-#include "chip8_Emulator.h"
+#include "chip8_emulator.h"
 
 enum
 {

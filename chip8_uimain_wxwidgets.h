@@ -35,6 +35,7 @@ class wxWinMain : public wxFrame
     void OnSetSpeed_1_0(wxCommandEvent& event);
     void OnSetSpeed_1_5(wxCommandEvent& event);
     void OnSetSpeed_2_0(wxCommandEvent& event);
+    void OnQuirkChange(wxCommandEvent& event);
 
     void OnConfigureKeymap(wxCommandEvent& event);
     void OnDumpScreen(wxCommandEvent& event);
@@ -58,6 +59,9 @@ class wxWinMain : public wxFrame
     wxMenuItem* menuItemSpeed1_0;
     wxMenuItem* menuItemSpeed1_5;
     wxMenuItem* menuItemSpeed2_0;
+    wxMenu* smenuQuirks;
+    wxMenuItem* menuItemQuirk_LDIncrementRegI;
+    wxMenuItem* menuItemQuirk_ShiftSourceReg;
     wxMenu* menuHelp;
     wxStatusBar* statusBar;
     wxTimer tTimer;

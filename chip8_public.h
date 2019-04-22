@@ -14,7 +14,15 @@ typedef int(*pCallbackFunc)(unsigned int event, word opCode);
 
 enum
 {
+  /**
+   * This will Increment Register I if values are stored from or read to Registers from Memory, <br>
+   * Applies to Instructions: 0xFX55, 0xFX65
+   */
   EMU_QUIRK_INCREMENT_I_ON_STORAGE=0x1,
+  /**
+   * On Shift Right or left, this will Shift the Source Register and store it after in the destination Register.
+   * Applies to Instructions: 0x8XY, 0x8XY
+   */
   EMU_QUIRK_SHIFT_SOURCE_REG      =0x2,
   /**
    * Emulator has 16 Keys (0..9, A..F)

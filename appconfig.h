@@ -5,14 +5,7 @@
 extern "C" {
 #endif
 
-typedef enum
-{
-  DATA_TYPE_INT,
-  DATA_TYPE_UINT,
-  DATA_TYPE_DOUBLE,
-  DATA_TYPE_BOOLEAN,
-  DATA_TYPE_STRING
-}EDataType;
+#include "datatypes.h"
 
 /**
  * Structure to define diffrent entries for the config. <br>
@@ -23,12 +16,19 @@ typedef enum
  *
  * char gCharArray[100]="Test initial String";
  *
- * AppConfigEntry taEntrys_m[]={{NULL, "ValInt",    DATA_TYPE_INT,     sizeof(int),          .data={.iVal=10}},
- *                              {NULL, "ValUint",   DATA_TYPE_UINT,    sizeof(unsigned int), .data={.uiVal=1010}},
- *                              {NULL, "ValBool",   DATA_TYPE_BOOLEAN, sizeof(int),          .data={.bVal=1}},
- *                              {NULL, "ValDouble", DATA_TYPE_DOUBLE,  sizeof(double),       .data={.dVal=1234.567}},
- *                              {NULL, "ValString", DATA_TYPE_STRING,  sizeof(gCharArray),   .data={.pcVal=gCharArray}},
- *                             };
+ * AppConfigEntry taEntrys_m[]={{.keyName="TestInt",     .groupName=NULL},
+ *                              {.keyName="TestUInt",    .groupName=NULL},
+ *                              {.keyName="TestDouble",  .groupName=NULL},
+ *                              {.keyName="TestBoolean", .groupName=NULL},
+ *                              {.keyName="TestString",  .groupName=NULL}};
+ *
+ * Optional, use the macros in datatypes.h to perform further initialisation.
+ *
+ * DATA_SET_INT(taEntrys_m[0].tagData,10);
+ * DATA_SET_INT(taEntrys_m[1].tagData,1010);
+ * DATA_SET_INT(taEntrys_m[2].tagData,123.456);
+ * ...
+ *
  */
 typedef struct
 {
@@ -41,31 +41,15 @@ typedef struct
    */
   const char *keyName;
   /**
-   * @see enum EDataType, defines what datatype union data contains.
+   * Contains information about data itself, @see TagData doc for details.
    */
-  EDataType dataType;
-  /**
-   * Size of the current data, for now this is only important for Strings. <br>
-   * If dataType is set to String, this is the usable size of the buffer pointed by data.pcVal. <br>
-   * For other types use sizeof(type) to initialize.
-   */
-  size_t dataSize;
-  /**
-   * Union to store the diffrent datatypes. <br>
-   * If String (pcVal) is used, make sure it points to a valid location, <br>
-   * that will stay valid during this library is used.
-   */
-  union DataType_T
-  {
-    int iVal;
-    unsigned int uiVal;
-    double dVal;
-    int bVal;
-    char *pcVal;
-  }data;
+  TagData tagData;
 }AppConfigEntry;
 
 typedef struct TagAppConfig_T* AppConfig;
+
+/* Define this, to print errors to stderr */
+#define APPCONFIG_PRINT_ERRORS
 
 
 /**
@@ -98,7 +82,7 @@ extern AppConfig appConfig_Load(const char *appName,
  *
  * @return 0 on success, nonzero on failure.
  */
-extern int appConfig_Save(AppConfig config);
+extern int appConfig_Save(const AppConfig config);
 
 /**
  * Returns the current configuration path
@@ -107,7 +91,7 @@ extern int appConfig_Save(AppConfig config);
  *
  * @return The Configuration path which is currently set.
  */
-extern const char *appConfig_GetPath(AppConfig config);
+extern const char *appConfig_GetPath(const AppConfig config);
 
 /**
  * Clears up the internal data and frees all memory used for the config.

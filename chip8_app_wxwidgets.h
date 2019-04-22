@@ -6,11 +6,11 @@
   #include <wx/wx.h>
 #endif
 
-#include "chip8_Emulator.h"
+#include "chip8_emulator.h"
 #include "appconfig.h"
 
 //Define this to enable debug output for gui
-  #define GUI_DEBUG_TRACE
+//#define GUI_DEBUG_TRACE
 
 #ifdef GUI_DEBUG_TRACE
   #define DEBUG_WXPUTS(str) wxPuts(str)
@@ -23,8 +23,9 @@
 #endif /* GUI_DEBUG_TRACE */
 
 #define APP_VERSION_MAJOR     0
-#define APP_VERSION_MINOR     2
+#define APP_VERSION_MINOR     3
 #define APP_VERSION_PATCH     0
+#define APP_VERSION_BUILDTIME "Build: " __DATE__ ", " __TIME__
 #define APP_DISPLAY_NAME      "Chip-8_Emulator"
 #define APP_VERSION_DEVSTATE  "Beta"
 #define APP_PROJECT_HOMEPAGE  "https://github.com/XXXBold/Chip8Emulator"
