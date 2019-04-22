@@ -5,13 +5,18 @@ Current status: WIP, tested on Windows, Beta release binary available for Window
 
 For getting some roms, refer to e.g. https://github.com/dmatlack/chip8/tree/master/roms or turn on your prefered search engine to tell you where's more ;)
 
+For using the Linux build, make sure you've installed wxwidgets and SDL2 libraries:
+
+For Ubuntu/debian based distros, install dependencies as follows (maybe some others aswell):
+
+- apt install libsdl2-dev libwxgtk3.0-dev
+
 ## Releases
 - 0.1: First Release
 - 0.2-beta: Added Superchip instructions
+- 0.3-beta: Added support for linux, changed renderer
 
 ## TODOs
-- Better files organization
-- Build for Linux
 - Add build instructions
 - More code cleanup
 
