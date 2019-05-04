@@ -46,6 +46,13 @@ typedef struct
   TagData tagData;
 }AppConfigEntry;
 
+enum AppCfg_ReturnCode_T
+{
+  APPCONFIG_LOAD_EXIST =0,
+  APPCONFIG_LOAD_NEW   =1,
+  APPCONFIG_LOAD_ERROR =-1
+};
+
 typedef struct TagAppConfig_T* AppConfig;
 
 /* Define this, to print errors to stderr */
@@ -55,6 +62,7 @@ typedef struct TagAppConfig_T* AppConfig;
 /**
  * Loads a config, if exist, or creates a new one.
  *
+ * @param config   Pointer to AppConfig. Will be initialized on success.
  * @param appName  _IN_ The name of the app, can't be NULL.
  * @param entries  _IN_ Pointer to AppConfigEntry struct defined by the user.
  *                 Only a reference to this will be stored internal, <br>
@@ -67,13 +75,16 @@ typedef struct TagAppConfig_T* AppConfig;
  *                 Pass NULL to use the default location of your Platform. <br>
  *                 Example: Default on Windows is: "C:User\<user>\AppData".
  *
- * @return New config on success, NULL on failure.
+ * @return APPCONFIG_LOAD_NEW   : New Config was created (didn't exist before)
+ *         APPCONFIG_LOAD_EXIST : Loaded existing config successfully.
+ *         APPCONFIG_LOAD_ERROR : Failed to load the config, don't use the config opject.
  */
-extern AppConfig appConfig_Load(const char *appName,
-                                AppConfigEntry *entries,
-                                size_t entriesCount,
-                                const char *fileName,
-                                const char *location);
+extern int appConfig_Load(AppConfig *config,
+                          const char *appName,
+                          AppConfigEntry *entries,
+                          size_t entriesCount,
+                          const char *fileName,
+                          const char *location);
 
 /**
  * Saves the configuration to disk.

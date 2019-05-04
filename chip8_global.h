@@ -11,10 +11,10 @@
 #include "chip8_public.h"
 
 /* Enable/disable trace here as needed */
-//#define TRACE_DEBUG_INFO
+  #define TRACE_DEBUG_INFO
   #define TRACE_DEBUG_ERROR
-//#define TRACE_CHIP8_INSTRUCTIONS
-//#define TRACE_SUCHIP_INSTRUCTIONS
+  #define TRACE_CHIP8_INSTRUCTIONS
+  #define TRACE_SUCHIP_INSTRUCTIONS
 
 /**
  * Global available macros

@@ -374,10 +374,15 @@ int IniFile_Write(Inifile file,
     }
     for(uiIndexKey=0;uiIndexKey < file->ptagSections[uiIndexSection].uiKeysCount;++uiIndexKey)
     {
-      uiSize=sizeof(file->caTmpBuffer);
-      Ini_EscapeString_m((unsigned char *)file->ptagSections[uiIndexSection].ptagKeys[uiIndexKey].caData,
-                         file->caTmpBuffer,
-                         &uiSize);
+      uiSize=file->uiBufSize;
+      if(Ini_EscapeString_m((unsigned char *)file->ptagSections[uiIndexSection].ptagKeys[uiIndexKey].caData,
+                            file->caTmpBuffer,
+                            &uiSize) != INI_ERR_NONE)
+      {
+        ERR_PRINT("Ini_EscapeString_m() failed, buffer too small, quit writing");
+        fclose(fp);
+        return(INI_ERR_BUFFER_TOO_SMALL);
+      }
       /* Check return val for possible I/O Error */
       if(fprintf(fp,
                  "%s=%s\n",
@@ -537,9 +542,10 @@ void IniFile_DumpContent(const Inifile file)
     for(uiIndexKey=0;uiIndexKey < file->ptagSections[uiIndexSection].uiKeysCount;++uiIndexKey)
     {
       uiSize=file->uiBufSize;
-      Ini_EscapeString_m((unsigned char*)file->ptagSections[uiIndexSection].ptagKeys[uiIndexKey].caData,
-                         file->caTmpBuffer,
-                         &uiSize);
+      if(Ini_EscapeString_m((unsigned char*)file->ptagSections[uiIndexSection].ptagKeys[uiIndexKey].caData,
+                            file->caTmpBuffer,
+                            &uiSize) != INI_ERR_NONE)
+        return;
       printf("0x%p=0x%p %s=%s\n",
              file->ptagSections[uiIndexSection].ptagKeys[uiIndexKey].caKeyName,
              file->ptagSections[uiIndexSection].ptagKeys[uiIndexKey].caData,

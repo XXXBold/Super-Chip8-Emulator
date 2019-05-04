@@ -30,231 +30,228 @@ wxWinKeyMap::wxWinKeyMap(wxWindow* parent,
 {
   this->SetSizeHints( wxDefaultSize, wxDefaultSize );
 
-  wxFlexGridSizer* fgSizer1;
-  fgSizer1 = new wxFlexGridSizer( 0, 4, 0, 0 );
-  fgSizer1->SetFlexibleDirection( wxBOTH );
-  fgSizer1->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
+  layMain = new wxFlexGridSizer( 0, 4, 0, 0 );
+  layMain->SetFlexibleDirection( wxBOTH );
+  layMain->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_ALL );
 
   wxStaticText* strEmuKey_1;
   strEmuKey_1 = new wxStaticText( this, wxID_ANY, wxT("Emu Key:"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey_1->Wrap( -1 );
-  fgSizer1->Add( strEmuKey_1, 0, wxALL, 5 );
+  layMain->Add( strEmuKey_1, 0, wxALL, 5 );
 
   wxStaticText* strKeyboard_1;
   strKeyboard_1 = new wxStaticText( this, wxID_ANY, wxT("Keyboard:"), wxDefaultPosition, wxDefaultSize, 0 );
   strKeyboard_1->Wrap( -1 );
-  fgSizer1->Add( strKeyboard_1, 0, wxALL, 5 );
+  layMain->Add( strKeyboard_1, 0, wxALL, 5 );
 
   wxStaticText* strEmuKey_2;
   strEmuKey_2 = new wxStaticText( this, wxID_ANY, wxT("Emu Key:"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey_2->Wrap( -1 );
-  fgSizer1->Add( strEmuKey_2, 0, wxALL, 5 );
+  layMain->Add( strEmuKey_2, 0, wxALL, 5 );
 
   wxStaticText* strKeyboard_2;
   strKeyboard_2 = new wxStaticText( this, wxID_ANY, wxT("Keyboard:"), wxDefaultPosition, wxDefaultSize, 0 );
   strKeyboard_2->Wrap( -1 );
-  fgSizer1->Add( strKeyboard_2, 0, wxALL, 5 );
+  layMain->Add( strKeyboard_2, 0, wxALL, 5 );
 
   wxStaticText* strEmuKey0;
   strEmuKey0 = new wxStaticText( this, wxID_ANY, wxT("0"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey0->Wrap( -1 );
-  strEmuKey0->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey0->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey0, 0, wxLEFT|wxRIGHT, 5 );
+  layMain->Add( strEmuKey0, 0, wxLEFT|wxRIGHT, 5 );
 
   wxArrayString chEmuKey0Choices;
   chEmuKey0 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey0Choices, 0 );
   chEmuKey0->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey0, 0, wxLEFT|wxRIGHT, 5 );
+  layMain->Add( chEmuKey0, 0, wxLEFT|wxRIGHT, 5 );
 
   wxStaticText* strEmuKey8;
   strEmuKey8 = new wxStaticText( this, wxID_ANY, wxT("8"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey8->Wrap( -1 );
-  strEmuKey8->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey8->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey8, 0, wxLEFT|wxRIGHT, 5 );
+  layMain->Add( strEmuKey8, 0, wxLEFT|wxRIGHT, 5 );
 
   wxArrayString chEmuKey8Choices;
   chEmuKey8 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey8Choices, 0 );
   chEmuKey8->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey8, 0, wxLEFT|wxRIGHT, 5 );
+  layMain->Add( chEmuKey8, 0, wxLEFT|wxRIGHT, 5 );
 
   wxStaticText* strEmuKey1;
   strEmuKey1 = new wxStaticText( this, wxID_ANY, wxT("1"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey1->Wrap( -1 );
-  strEmuKey1->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey1->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey1, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey1, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey1Choices;
   chEmuKey1 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey1Choices, 0 );
   chEmuKey1->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey1, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey1, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey9;
   strEmuKey9 = new wxStaticText( this, wxID_ANY, wxT("9"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey9->Wrap( -1 );
-  strEmuKey9->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey9->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey9, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey9, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey9Choices;
   chEmuKey9 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey9Choices, 0 );
   chEmuKey9->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey9, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey9, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey2;
   strEmuKey2 = new wxStaticText( this, wxID_ANY, wxT("2"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey2->Wrap( -1 );
-  strEmuKey2->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey2->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey2, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey2, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey2Choices;
   chEmuKey2 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey2Choices, 0 );
   chEmuKey2->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey2, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey2, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKeyA;
   strEmuKeyA = new wxStaticText( this, wxID_ANY, wxT("A"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKeyA->Wrap( -1 );
-  strEmuKeyA->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKeyA->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKeyA, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKeyA, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKeyAChoices;
   chEmuKeyA = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKeyAChoices, 0 );
   chEmuKeyA->SetSelection( 0 );
-  fgSizer1->Add( chEmuKeyA, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKeyA, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey3;
   strEmuKey3 = new wxStaticText( this, wxID_ANY, wxT("3"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey3->Wrap( -1 );
-  strEmuKey3->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey3->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey3, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey3, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey3Choices;
   chEmuKey3 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey3Choices, 0 );
   chEmuKey3->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey3, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey3, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKeyB;
   strEmuKeyB = new wxStaticText( this, wxID_ANY, wxT("B"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKeyB->Wrap( -1 );
-  strEmuKeyB->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKeyB->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKeyB, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKeyB, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKeyBChoices;
   chEmuKeyB = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKeyBChoices, 0 );
   chEmuKeyB->SetSelection( 0 );
-  fgSizer1->Add( chEmuKeyB, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKeyB, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey4;
   strEmuKey4 = new wxStaticText( this, wxID_ANY, wxT("4"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey4->Wrap( -1 );
-  strEmuKey4->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey4->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey4, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey4, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey4Choices;
   chEmuKey4 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey4Choices, 0 );
   chEmuKey4->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey4, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey4, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKeyC;
   strEmuKeyC = new wxStaticText( this, wxID_ANY, wxT("C"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKeyC->Wrap( -1 );
-  strEmuKeyC->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKeyC->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKeyC, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKeyC, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKeyCChoices;
   chEmuKeyC = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKeyCChoices, 0 );
   chEmuKeyC->SetSelection( 0 );
-  fgSizer1->Add( chEmuKeyC, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKeyC, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey5;
   strEmuKey5 = new wxStaticText( this, wxID_ANY, wxT("5"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey5->Wrap( -1 );
-  strEmuKey5->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey5->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey5, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey5, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey5Choices;
   chEmuKey5 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey5Choices, 0 );
   chEmuKey5->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey5, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey5, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKeyD;
   strEmuKeyD = new wxStaticText( this, wxID_ANY, wxT("D"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKeyD->Wrap( -1 );
-  strEmuKeyD->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKeyD->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKeyD, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKeyD, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKeyDChoices;
   chEmuKeyD = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKeyDChoices, 0 );
   chEmuKeyD->SetSelection( 0 );
-  fgSizer1->Add( chEmuKeyD, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKeyD, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey6;
   strEmuKey6 = new wxStaticText( this, wxID_ANY, wxT("6"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey6->Wrap( -1 );
-  strEmuKey6->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey6->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey6, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey6, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey6Choices;
   chEmuKey6 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey6Choices, 0 );
   chEmuKey6->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey6, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey6, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKeyE;
   strEmuKeyE = new wxStaticText( this, wxID_ANY, wxT("E"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKeyE->Wrap( -1 );
-  strEmuKeyE->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKeyE->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKeyE, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKeyE, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKeyEChoices;
   chEmuKeyE = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKeyEChoices, 0 );
   chEmuKeyE->SetSelection( 0 );
-  fgSizer1->Add( chEmuKeyE, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKeyE, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKey7;
   strEmuKey7 = new wxStaticText( this, wxID_ANY, wxT("7"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKey7->Wrap( -1 );
-  strEmuKey7->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKey7->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKey7, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKey7, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKey7Choices;
   chEmuKey7 = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKey7Choices, 0 );
   chEmuKey7->SetSelection( 0 );
-  fgSizer1->Add( chEmuKey7, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKey7, 0, wxRIGHT|wxLEFT, 5 );
 
   wxStaticText* strEmuKeyF;
   strEmuKeyF = new wxStaticText( this, wxID_ANY, wxT("F"), wxDefaultPosition, wxDefaultSize, 0 );
   strEmuKeyF->Wrap( -1 );
-  strEmuKeyF->SetFont( wxFont( 15, 70, 90, 92, false, wxEmptyString ) );
+  strEmuKeyF->SetFont( wxFont( 15, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD, false, wxEmptyString ) );
 
-  fgSizer1->Add( strEmuKeyF, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( strEmuKeyF, 0, wxRIGHT|wxLEFT, 5 );
 
   wxArrayString chEmuKeyFChoices;
   chEmuKeyF = new wxChoice( this, CHOICE_KEYMAP_ANY, wxDefaultPosition, wxDefaultSize, chEmuKeyFChoices, 0 );
   chEmuKeyF->SetSelection( 0 );
-  fgSizer1->Add( chEmuKeyF, 0, wxRIGHT|wxLEFT, 5 );
+  layMain->Add( chEmuKeyF, 0, wxRIGHT|wxLEFT, 5 );
 
 
-  this->SetSizer( fgSizer1 );
+  this->SetSizer( layMain );
   this->Layout();
-  fgSizer1->Fit( this );
+  layMain->Fit( this );
 
   this->Centre( wxBOTH );
-
-  this->vPopulateControls();
 }
 
 bool wxWinKeyMap::Show(bool show)
@@ -264,8 +261,8 @@ bool wxWinKeyMap::Show(bool show)
   {
     this->vUpdateKeymapControls();
     this->bKeymapChanged=false;
+    this->Layout();
   }
-
   return(wxFrame::Show(show));
 }
 

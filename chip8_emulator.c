@@ -101,14 +101,14 @@ enum
 
 #define TXT_OPC_DESC_0x00CN "Scroll down 0x%.2X Lines"               /* Superchip-Instruction */
 #define TXT_OPC_DESC_0x00E0 "Clear Screen"
-#define TXT_OPC_DESC_0x00EE "Return from subroutine"
+#define TXT_OPC_DESC_0x00EE "Return from subroutine (%u<--%u/%u)"
 #define TXT_OPC_DESC_0x00FB "Scroll 4 pixels right"                  /* Superchip-Instruction */
 #define TXT_OPC_DESC_0x00FC "Scroll 4 pixels left"                   /* Superchip-Instruction */
 #define TXT_OPC_DESC_0x00FD "Exit Program"                           /* Superchip-Instruction */
 #define TXT_OPC_DESC_0x00FE "Disable extended screen mode"           /* Superchip-Instruction */
 #define TXT_OPC_DESC_0x00FF "Enable extended screen mode (128 x 64)" /* Superchip-Instruction */
 #define TXT_OPC_DESC_0x1NNN "Jump to Address 0x%.2X"
-#define TXT_OPC_DESC_0x2NNN "Jump to Subroutine at Address 0x%.2X (Stack %u->+1/%u)"
+#define TXT_OPC_DESC_0x2NNN "Jump to Subroutine at Address 0x%.2X (Stack %u-->%u/%u)"
 #define TXT_OPC_DESC_0x3XKK "Skip Next Instruction if V%X(=0x%.2X) == 0x%.2X"
 #define TXT_OPC_DESC_0x4XKK "Skip Next Instruction if V%X(=0x%.2X) != 0x%.2X"
 #define TXT_OPC_DESC_0x5XY0 "Skip Next Instruction if V%X==V%X"
@@ -604,7 +604,12 @@ int chip8_Process(TagEmulator *pEmulator)
 //        printf("Stackptr: 0x%X, startstack: 0x%X, Endstack: 0x%X\n",REG_PTR_STACK,OFF_ADDR_STACK_START,OFF_ADDR_STACK_END);
           if(REG_PTR_STACK>OFF_ADDR_STACK_START)
           {
-            TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0x00EE,REG_PC,pEmulator->tCurrOPCode);
+            TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0x00EE,
+                              REG_PC,
+                              pEmulator->tCurrOPCode,
+                              (word)((REG_PTR_STACK-OFF_ADDR_STACK_START)/sizeof(word))-1,
+                              (word)((REG_PTR_STACK-OFF_ADDR_STACK_START)/sizeof(word)),
+                              (word)((OFF_ADDR_STACK_END-OFF_ADDR_STACK_START+1)/sizeof(word)));
             REG_STACKPTR_1UP(REG_PTR_STACK); /* Move stackpointer 1 level up */
             REG_PC=MEM_ADDRESS_AS_WORD(REG_PTR_STACK);
             TRACE_DBG_INFO_VARG("Returning from subroutine (->@0x%.4X), deepness: <--%u/%u",
@@ -671,19 +676,20 @@ int chip8_Process(TagEmulator *pEmulator)
     case 0x2000: /* 0x2nnn, Jump to addr, as a subroutine */
       tOPCode&=0xFFF;
       TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0x2NNN,
-                  REG_PC,
-                  pEmulator->tCurrOPCode,
-                  tOPCode,
-                  tOPCode,
-                  (word)((REG_PTR_STACK-OFF_ADDR_STACK_START)/sizeof(word)),
-                  (word)((OFF_ADDR_STACK_END-OFF_ADDR_STACK_START)/sizeof(word)));
+                        REG_PC,
+                        pEmulator->tCurrOPCode,
+                        tOPCode,
+                        tOPCode,
+                        (word)((REG_PTR_STACK-OFF_ADDR_STACK_START)/sizeof(word)),
+                        (word)((REG_PTR_STACK-OFF_ADDR_STACK_START)/sizeof(word))+1,
+                        (word)((OFF_ADDR_STACK_END-OFF_ADDR_STACK_START)/sizeof(word)));
       if(MEM_JMP_ADDR_VALID(tOPCode))
       {
         if(REG_PTR_STACK<OFF_ADDR_STACK_END)
         {
           MEM_ADDRESS_AS_WORD(REG_PTR_STACK)=REG_PC; /* Store curr PC in Stack */
-          REG_PC=tOPCode;
           TRACE_DBG_INFO_VARG("Storing Current Programmcounter (0x%.4X) @Stack: 0x%.4X",REG_PC,REG_PTR_STACK);
+          REG_PC=tOPCode;
           REG_STACKPTR_1DOWN(REG_PTR_STACK); /* Move stackpointer 1 level down */
           return(RET_CHIP8_OPCODE_OK); /* Return immediately, no increment of PC needed */
         }
@@ -1179,13 +1185,14 @@ INLINE_FCT int iChip8_Sprite_m(TagEmulator *pEmulator,
     }
     tLastVal|=MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX,tPosY+uiIndex);
 
+    fprintf(stderr,"1: Last Val: 0x%.2X\n",tLastVal);
     if((tPosX+8u<uiScreenWidth) && (tPosX&0x7))
     {
       tLastVal|=(MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+8,tPosY+uiIndex)<<8);
     }
     tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex])>>(tPosX&0x7);
     MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX,tPosY+uiIndex)^=(tCurrVal);
-
+    fprintf(stderr,"2: Last Val: 0x%.2X\n",tLastVal);
     if((tPosX+8u<uiScreenWidth) && (tPosX&0x7))
     {
       tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex] & (0xFF>>(8-(tPosX&0x7)))) << (16-(tPosX&0x7));
@@ -1196,8 +1203,6 @@ INLINE_FCT int iChip8_Sprite_m(TagEmulator *pEmulator,
       TRACE_DBG_INFO("Cancel drawing, Y-Axis Overflow");
       break;
     }
-    tLastVal|=MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX,tPosY+uiIndex);
-
     if((!REG_VF) &&
        ((tCurrVal&tLastVal)>0))
     {

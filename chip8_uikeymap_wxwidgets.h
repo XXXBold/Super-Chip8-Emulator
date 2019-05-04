@@ -32,6 +32,7 @@ class wxWinKeyMap : public wxFrame
     unsigned char ucaKeymapTmp[16];
     bool bKeymapChanged;
   protected:
+    wxFlexGridSizer* layMain;
     wxChoice* chEmuKey0;
     wxChoice* chEmuKey8;
     wxChoice* chEmuKey1;
@@ -48,8 +49,6 @@ class wxWinKeyMap : public wxFrame
     wxChoice* chEmuKeyE;
     wxChoice* chEmuKey7;
     wxChoice* chEmuKeyF;
-
-
 };
 
 #endif //CHIP8_UIKEYMAP_WXWIDGETS_H_INCLUDED

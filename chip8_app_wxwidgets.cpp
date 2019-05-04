@@ -196,7 +196,12 @@ bool Chip8_GUI::bConfigLoad()
   DATA_SET_INT(this->taCfgEntries[uiIndex].tagData,EMU_KEY_F);
   this->entriesCount=sizeof(this->taCfgEntries)/sizeof(AppConfigEntry);
 
-  if(!(this->appCfg=appConfig_Load(APP_DISPLAY_NAME,this->taCfgEntries,this->entriesCount,NULL,NULL)))
+  if(appConfig_Load(&this->appCfg,
+                    APP_DISPLAY_NAME,
+                    this->taCfgEntries,
+                    this->entriesCount,
+                    NULL,
+                    NULL) == APPCONFIG_LOAD_ERROR)
   {
     return(false);
   }

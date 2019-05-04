@@ -69,66 +69,67 @@ INLINE_PROT int iAppConfig_CreateDirIfNotExist_m(const char *pcDir);
 INLINE_PROT int iAppConfig_Inifile_Load_m(AppConfig pCfg);
 INLINE_PROT int iAppConfig_Inifile_Save_m(const AppConfig pCfg);
 
-AppConfig appConfig_Load(const char *appName,
-                         AppConfigEntry *entries,
-                         size_t entriesCount,
-                         const char *fileName,
-                         const char *location)
+int appConfig_Load(AppConfig *config,
+                   const char *appName,
+                   AppConfigEntry *entries,
+                   size_t entriesCount,
+                   const char *fileName,
+                   const char *location)
 {
   unsigned int uiTmp;
-  AppConfig pNewAppCfg;
 
   if((!entries) || (!entriesCount))
-    return(NULL);
+    return(APPCONFIG_LOAD_ERROR);
 
-  if(!(pNewAppCfg=malloc(sizeof(struct TagAppConfig_T))))
+  if(!((*config)=malloc(sizeof(struct TagAppConfig_T))))
   {
     ERR_PRINT("malloc() failed");
-    return(NULL);
+    return(APPCONFIG_LOAD_ERROR);
   }
 
   if(!fileName)
     fileName=DEFAULT_FILENAME;
 
   uiTmp=MAX_PATHLEN;
-  if(iAppConfig_AssembleDestFolderPath_m(pNewAppCfg,
+  if(iAppConfig_AssembleDestFolderPath_m((*config),
                                          &uiTmp,
                                          appName,
                                          fileName,
                                          location))
   {
     ERR_PRINT("iAppConfig_AssembleDestFolderPath_m() failed");
-    free(pNewAppCfg);
-    return(NULL);
+    free(*config);
+    return(APPCONFIG_LOAD_ERROR);
   }
-  if(iAppConfig_CreateDirIfNotExist_m(pNewAppCfg->caPath) < 0)
+  if(iAppConfig_CreateDirIfNotExist_m((*config)->caPath) < 0)
   {
     ERR_PRINT("iAppConfig_CreateDirIfNotExist_m() failed");
-    free(pNewAppCfg);
-    return(NULL);
+    free(*config);
+    return(APPCONFIG_LOAD_ERROR);
   }
   /* bufferlength is checked in AssembleDestFolderPath, so strcpy is fine */
-  strcpy(&pNewAppCfg->caPath[uiTmp],fileName);
-  pNewAppCfg->pEntries=entries;
-  pNewAppCfg->szEntriesCount=entriesCount;
+  strcpy(&(*config)->caPath[uiTmp],fileName);
+  (*config)->pEntries=entries;
+  (*config)->szEntriesCount=entriesCount;
 
-  if(iAppConfig_Create_m(pNewAppCfg))
+  if(iAppConfig_Create_m(*config))
   {
     ERR_PRINT("iAppConfig_Create_m() failed");
-    free(pNewAppCfg);
-    return(NULL);
+    free(*config);
+    return(APPCONFIG_LOAD_ERROR);
   }
-  if(iAppConfig_FileExists_m(pNewAppCfg->caPath))
+  if(iAppConfig_FileExists_m((*config)->caPath))
   {
     /* Load File if it exists */
-    if(iAppConfig_Inifile_Load_m(pNewAppCfg))
+    if(iAppConfig_Inifile_Load_m((*config)))
     {
       ERR_PRINT("iAppConfig_Inifile_Load_m() failed");
-      free(pNewAppCfg);
-      return(NULL);
+      free(*config);
+      return(APPCONFIG_LOAD_ERROR);
     }
+    return(APPCONFIG_LOAD_EXIST);
   }
-  return(pNewAppCfg);
+  return(APPCONFIG_LOAD_NEW);
 }
 
 int appConfig_Save(const AppConfig config)
@@ -182,7 +183,7 @@ INLINE_FCT int iAppConfig_Inifile_Load_m(AppConfig pCfg)
     }
   }
   /* Got all needed entries, clear inifile data */
-  IniFile_DumpContent(pCfg->store.iniFile);
+  IniFile_DumpContent(pCfg->store.iniFile);   // TODO: remove this
   IniFile_Clean(pCfg->store.iniFile);
   return(0);
 }
