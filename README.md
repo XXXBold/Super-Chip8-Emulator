@@ -15,6 +15,7 @@ For Ubuntu/debian based distros, install dependencies as follows (maybe some oth
 - 0.1: First Release
 - 0.2-beta: Added Superchip instructions
 - 0.3-beta: Added support for linux, changed renderer
+- 0.3.1-beta: Bugfix, Register VF is now set correctly
 
 ## TODOs
 - Add build instructions
