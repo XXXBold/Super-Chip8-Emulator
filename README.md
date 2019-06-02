@@ -9,7 +9,11 @@ For using the Linux build, make sure you've installed wxwidgets and SDL2 librari
 
 For Ubuntu/debian based distros, install dependencies as follows (maybe some others aswell):
 
-- apt install libsdl2-dev libwxgtk3.0-dev
+To compile it yourself (You can also run it with these):
+- apt install libsdl2-dev libwxgtk3.0-gtk3-dev
+
+Just for running the binaries (untested):
+- apt install libsdl2-2.0-0 libwxgtk3.0-gtk3-0v5 
 
 ## Releases
 - 0.1: First Release
