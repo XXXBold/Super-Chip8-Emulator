@@ -18,12 +18,20 @@ enum
    * This will Increment Register I if values are stored from or read to Registers from Memory, <br>
    * Applies to Instructions: 0xFX55, 0xFX65
    */
-  EMU_QUIRK_INCREMENT_I_ON_STORAGE=0x1,
+  EMU_QUIRK_INCREMENT_I_ON_STORAGE    =0x1,
   /**
    * On Shift Right or left, this will Shift the Source Register and store it after in the destination Register.
    * Applies to Instructions: 0x8XY, 0x8XY
    */
-  EMU_QUIRK_SHIFT_SOURCE_REG      =0x2,
+  EMU_QUIRK_SHIFT_SOURCE_REG          =0x2,
+  /**
+   * Will simply skip instruction codes which aren't recognized by the emulator.
+   */
+  EMU_QUIRK_SKIP_INSTRUCTIONS_UNKNOWN =0x4,
+  /**
+   * Will skip instruction codes, which couldn't be executed because of an error (e.g. memory overflow, invalid values etc)
+   */
+  EMU_QUIRK_SKIP_INSTRUCTIONS_INVALID =0x8,
   /**
    * Emulator has 16 Keys (0..9, A..F)
    */
@@ -98,19 +106,22 @@ enum UsrCBEvent
   /**
    * Calls pCallbackFunc if the current instruction code is unknown.
    */
-  EMU_EVT_INSTRUCTION_UNKNOWN         = 0x0100,
+  EMU_EVT_ERR_INSTRUCTION_UNKNOWN     = 0x0100,
   /**
    * Calls pCallbackFunc if the current Instruction code would cause an error. <br>
    * Possible Errors are e.g. Buffer overflow, Invalid values, etc.
    */
-  EMU_EVT_INSTRUCTION_ERROR           = 0x0200,
-
+  EMU_EVT_ERR_INVALID_INSTRUCTION     = 0x0200,
+  /**
+   * Calls pCallbackFunc if an internal error occured. <br>
+   * This might be a bug in the Emulator and should be reported.
+   */
+  EMU_EVT_ERR_INTERNAL                = 0x0800,
   /**
    * Calls pCallbackFunc if Escape is pressed. This can be used to pause the Emulator, <br>
    * but do not call any chip8_ Functions directly in the callback, this could cause a deadlock.
    */
   EMU_EVT_KEYPRESS_ESCAPE             = 0x1000,
-
   /**
    * Calls pCallbackFunc if any of the event occurs.
    */
@@ -145,7 +156,19 @@ typedef enum
    * This is technically the same state as EMU_STATE_PAUSE, but can't be resumed <br>
    * without further investigation, or it will fail again immediatly.
    */
-  EMU_STATE_ERROR_INSTRUCTION
+  EMU_STATE_ERR_INVALID_INSTRUCTION,
+
+  /**
+   * The processed Instruction doesn't match a specific Chip8 Instruction. <br>
+   * Probably you have to define ENABLE_SUPERCHIP_INSTRUCTIONS to make the Emulator recognize Superchip instructions. <br>
+   * If it's already enabled, the ROM itself might be faulty.
+   */
+  EMU_STATE_ERR_UNKNOWN_INSTRUCTION,
+  /**
+   * Indicates an internal Error. this should not happen and might be a bug in the Emulator itself. <br>
+   * Please report if such an error occurs.
+   */
+  EMU_STATE_ERR_INTERNAL,
 }EEmulatorState;
 
 /**
@@ -153,6 +176,10 @@ typedef enum
  */
 typedef enum
 {
+  /**
+   * 1/4 Speed
+   */
+  EMU_SPEED_0_25X=1,
   /**
    * Half of the default speed
    */
@@ -169,6 +196,14 @@ typedef enum
    * Double of the original speed
    */
   EMU_SPEED_2_0X,
+  /**
+   * x5
+   */
+  EMU_SPEED_5_0X,
+  /**
+   * x10
+   */
+  EMU_SPEED_10_0X,
 }EEmulationSpeed;
 
 #endif /* CHIP8_PUBLIC_H_INCLUDED */

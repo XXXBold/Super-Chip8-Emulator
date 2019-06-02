@@ -297,6 +297,9 @@ int chip8_Init(int winPosX,
 
   tagEmulator_g.tagPlaySound.uiFreqSoundHz=CHIP8_SOUND_FREQ;
 
+  tagEmulator_g.tFileSize=0;
+  tagEmulator_g.tFileStartIndex=OFF_ADDR_USER_START;
+
   /* Reset all updateSettings flags */
   tagEmulator_g.updateSettings.emu_ExecSpeed=0;
   tagEmulator_g.updateSettings.keyboard_Keymap=0;
@@ -327,6 +330,7 @@ int chip8_Init(int winPosX,
   }
   /* Initialise RNG */
   srand((unsigned int)time(NULL));
+  memset(tagEmulator_g.taFileLoaded,0,sizeof(tagEmulator_g.taFileLoaded));
   vChip8_MemoryInit_m(tagEmulator_g.taChipMemory,OFF_ADDR_USER_START);
 
   if(iChip8_External_Init_g(&tagEmulator_g)) /* Init external libraries */
@@ -341,6 +345,22 @@ void chip8_Close(void)
 {
   TRACE_DBG_INFO("Shutting down Chip-8 Emulator...");
   vChip8_External_Close_g(&tagEmulator_g);
+}
+
+void chip8_Reset(void)
+{
+  /* Return if emulator is not initialised yet */
+  if(tagEmulator_g.tagThrdEmu.eEmuState==EMU_STATE_INACTIVE)
+    return;
+
+  tagEmulator_g.updateSettings.screen_Clear=1;
+  if(tagEmulator_g.tagThrdEmu.eEmuState != EMU_STATE_PAUSE)
+  {
+    tagEmulator_g.updateSettings.emu_Pause=1;
+    while(tagEmulator_g.updateSettings.emu_Pause);
+  }
+  vChip8_MemoryInit_m(tagEmulator_g.taChipMemory,tagEmulator_g.tFileStartIndex);
+  memcpy(&tagEmulator_g.taChipMemory[tagEmulator_g.tFileStartIndex],tagEmulator_g.taFileLoaded,tagEmulator_g.tFileSize);
 }
 
 EEmulatorState chip8_GetEmulatorState(void)
@@ -478,14 +498,16 @@ void chip8_SetKeymap(unsigned char newKeymap[EMU_KEY_COUNT])
 
 void chip8_EnableQuirks(unsigned int quirks)
 {
-  tagEmulator_g.uiQuirks=(quirks&(EMU_QUIRK_INCREMENT_I_ON_STORAGE|EMU_QUIRK_SHIFT_SOURCE_REG));
+  tagEmulator_g.uiQuirks=(quirks&(EMU_QUIRK_INCREMENT_I_ON_STORAGE    |
+                                  EMU_QUIRK_SHIFT_SOURCE_REG          |
+                                  EMU_QUIRK_SKIP_INSTRUCTIONS_UNKNOWN |
+                                  EMU_QUIRK_SKIP_INSTRUCTIONS_INVALID));
 }
 
 int chip8_LoadFile(const char *pcFilePath,
                    word tStartAddress)
 {
   FILE *fp;
-  byte taMemTemp[OFF_ADDR_USER_END-OFF_ADDR_USER_START+1];
   unsigned int uiReadSize;
 
   chip8_SetPause(1);
@@ -502,7 +524,7 @@ int chip8_LoadFile(const char *pcFilePath,
     TRACE_DBG_ERROR_VARG("chip8_LoadFile() failed to open File \"%s\": (%d) %s",pcFilePath,errno,strerror(errno));
     return(-1);
   }
-  if((uiReadSize=fread(taMemTemp,1,sizeof(taMemTemp),fp))<1)
+  if((uiReadSize=fread(tagEmulator_g.taFileLoaded,1,sizeof(tagEmulator_g.taFileLoaded),fp)) < 1)
   {
     if(ferror(fp))
     {
@@ -516,53 +538,59 @@ int chip8_LoadFile(const char *pcFilePath,
   }
   if(!feof(fp))
   {
-    TRACE_DBG_ERROR_VARG("chip8_LoadFile(): file \"%s\" is too big  (> 0x%X-0x%X)",pcFilePath,tStartAddress,OFF_ADDR_USER_END);
+    TRACE_DBG_ERROR_VARG("chip8_LoadFile(): file \"%s\" is too big (> 0x%X-0x%X)",pcFilePath,tStartAddress,OFF_MEM_SIZE);
     fclose(fp);
     return(-1);
   }
   fclose(fp);
   vChip8_MemoryInit_m(tagEmulator_g.taChipMemory,tStartAddress);
-  memcpy(&tagEmulator_g.taChipMemory[tStartAddress],taMemTemp,uiReadSize);
+  tagEmulator_g.tFileStartIndex=tStartAddress;
+  tagEmulator_g.tFileSize=(word)uiReadSize; /* Size okay, must fit in word */
+  memcpy(&tagEmulator_g.taChipMemory[tStartAddress],tagEmulator_g.taFileLoaded,uiReadSize);
   tagEmulator_g.updateSettings.screen_ExMode_Dis=1;
   tagEmulator_g.updateSettings.screen_Clear=1;
   return(0);
 }
 
-void chip8_DumpScreen(void)
+void chip8_DumpScreen(FILE *fp)
 {
   int iIndex;
   int iIndexB;
   int iScreenWidth=(tagEmulator_g.tagWindow.info.exModeOn)?SUCHIP_SCREEN_WIDTH:CHIP8_SCREEN_WIDTH;
   int iScreenHeigth=(tagEmulator_g.tagWindow.info.exModeOn)?SUCHIP_SCREEN_HEIGHT:CHIP8_SCREEN_HEIGHT;
-#ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
-  char caTextBuffer[SUCHIP_SCREEN_WIDTH+3];
-#else
-  char caTextBuffer[CHIP8_SCREEN_WIDTH+3];
-#endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
+  char caTextBuffer[SUCHIP_SCREEN_WIDTH+4];
 
   caTextBuffer[0]='|';
   caTextBuffer[iScreenWidth+1]='|';
-  caTextBuffer[iScreenWidth+2]='\0';
-  puts("Display (1=white, 0=black):\n"
-       "-------------------------------------------------------------------------------");
+  caTextBuffer[iScreenWidth+2]='\n';
+  caTextBuffer[iScreenWidth+3]='\0';
+  fputs("Display (1=white, 0=black):\n"
+        "-------------------------------------------------------------------------------\n",
+        fp);
   for(iIndex=0;iIndex<iScreenHeigth;++iIndex)
   {
     for(iIndexB=0;iIndexB<iScreenWidth;++iIndexB)
     {
       caTextBuffer[iIndexB+1]=MEM_SCREEN_BIT_CHECK(tagEmulator_g.tagWindow,iIndexB,iIndex)?'1':'0';
     }
-    puts(caTextBuffer);
+    fputs(caTextBuffer,fp);
   }
-  puts("-------------------------------------------------------------------------------");
+  fputs("-------------------------------------------------------------------------------\n",fp);
 }
 
 int chip8_Process(TagEmulator *pEmulator)
 {
-  int iRc=RET_CHIP8_OPCODE_OK;
+  int iRc=RET_CHIP8_OPCODE;
   word tOPCode;
   byte tRegX;
   byte tRegY;
 
+  if(REG_PC+2 > pEmulator->tFileStartIndex + pEmulator->tFileSize)
+  {
+    pEmulator->tCurrOPCode=0;
+    iRc|=RET_END_OF_MEMORY;
+    return(iRc);
+  }
   tOPCode=pEmulator->taChipMemory[REG_PC];
   tOPCode=(tOPCode<<8)|pEmulator->taChipMemory[REG_PC+1];
   pEmulator->tCurrOPCode=tOPCode;
@@ -573,12 +601,13 @@ int chip8_Process(TagEmulator *pEmulator)
       if((tOPCode&0x0F00)) /* This byte must be 0 */
       {
         TRACE_DBG_ERROR_VARG("Invalid OPCode: 0x%.4X",tOPCode);
-        return(RET_ERR_INSTRUCTION_UNKNOWN);
+        iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+        break;
       }
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
       if((tOPCode&0x00F0)==0x00C0)
       {
-        tOPCode&=0x000F;
+        tOPCode&=0x000F; /* Scroll x Lines down */
         iRc=((pEmulator->tagWindow.info.exModeOn)?SUCHIP_SCREEN_WIDTH:CHIP8_SCREEN_WIDTH)/8;
         TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0x00CN,REG_PC,pEmulator->tCurrOPCode,tOPCode,tOPCode);
         TRACE_DBG_INFO_VARG("Scrolling down 0x%X lines, moving from data[0x0000]->[0x%.4X] (0x%.4X bytes), set data[0x0000]->[0x%.4X] to 0",
@@ -590,7 +619,7 @@ int chip8_Process(TagEmulator *pEmulator)
                 &pEmulator->tagWindow.taScreenBuffer[0],
                 ((pEmulator->tagWindow.info.exModeOn)?SCREEN_SIZE_EXMODE:SCREEN_SIZE_NORMAL)-iRc*tOPCode);
         memset(pEmulator->tagWindow.taScreenBuffer,0,iRc*tOPCode);
-        iRc=RET_SUCHIP_OPCODE_OK;
+        iRc=RET_SUCHIP_OPCODE;
         break;
       }
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
@@ -619,7 +648,8 @@ int chip8_Process(TagEmulator *pEmulator)
             break; /* Break okay, will increment stored address below and continue at previous point */
           }
           TRACE_DBG_ERROR("RET failed, already on top, end pgm here?");
-          return(RET_ERR_STACK_ON_TOP);
+          iRc|=RET_ERR_STACK_ON_TOP;
+          break;
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
         case SUCHIP_CMD_SCROLL_RIGHT:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0x00FB,REG_PC,pEmulator->tCurrOPCode);
@@ -627,11 +657,12 @@ int chip8_Process(TagEmulator *pEmulator)
           tRegX=(pEmulator->tagWindow.info.exModeOn)?SUCHIP_SCREEN_WIDTH:CHIP8_SCREEN_WIDTH;
           for(tOPCode=0;tOPCode<8;++tOPCode)
           {
+            /* Screll right, 2 bytes if normal (64x32) screen mode, 4 bytes on extended (128x64) mode */
             vChip8_ShiftRight_m(&MEM_SCREEN_BYTE(pEmulator->tagWindow,0,tOPCode),
                                 tRegX/8,
-                                4);
+                                (pEmulator->tagWindow.info.exModeOn)?4:2);
           }
-          iRc=RET_SUCHIP_OPCODE_OK;
+          iRc=RET_SUCHIP_OPCODE;
           break;
         case SUCHIP_CMD_SCROLL_LEFT:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0x00FC,REG_PC,pEmulator->tCurrOPCode);
@@ -639,28 +670,32 @@ int chip8_Process(TagEmulator *pEmulator)
           tRegX=(pEmulator->tagWindow.info.exModeOn)?SUCHIP_SCREEN_WIDTH:CHIP8_SCREEN_WIDTH;
           for(tOPCode=0;tOPCode<tRegY;++tOPCode)
           {
+            /* Screll left, 2 bytes if normal (64x32) screen mode, 4 bytes on extended (128x64) mode */
             vChip8_ShiftLeft_m(&MEM_SCREEN_BYTE(pEmulator->tagWindow,0,tOPCode),
                                tRegX/8,
-                               4);
+                               (pEmulator->tagWindow.info.exModeOn)?4:2);
           }
-          iRc=RET_SUCHIP_OPCODE_OK;
+          iRc=RET_SUCHIP_OPCODE;
           break;
         case SUCHIP_CMD_EXIT:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0x00FD,REG_PC,pEmulator->tCurrOPCode);
-          return(RET_PGM_EXIT);
+          iRc=RET_SUCHIP_OPCODE;
+          iRc|=RET_PGM_EXIT;
+          break;
         case SUCHIP_CMD_DIS_EX_SCREEN:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0x00FE,REG_PC,pEmulator->tCurrOPCode);
           pEmulator->updateSettings.screen_ExMode_Dis=1; /* Will be processed after return */
-          iRc=RET_SUCHIP_OPCODE_OK;
+          iRc=RET_SUCHIP_OPCODE;
           break;
         case SUCHIP_CMD_EN_EX_SCREEN:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0x00FF,REG_PC,pEmulator->tCurrOPCode);
           pEmulator->updateSettings.screen_ExMode_En=1; /* Will be processed after return */
-          iRc=RET_SUCHIP_OPCODE_OK;
+          iRc=RET_SUCHIP_OPCODE;
           break;
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
         default:
-          return(RET_ERR_INSTRUCTION_UNKNOWN);
+          iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+          break;
       }
       break;
     case 0x1000: /* 0x1nnn, Jump to address */
@@ -669,10 +704,12 @@ int chip8_Process(TagEmulator *pEmulator)
       if(MEM_JMP_ADDR_VALID(tOPCode))
       {
         REG_PC=tOPCode;
-        return(RET_CHIP8_OPCODE_OK); /* Return immediately, no increment of PC needed */
+        tOPCode=0xFFFF;  /* No increment of PC needed */
+        break;
       }
       TRACE_DBG_ERROR_VARG("JMP failed, tried to jump to addr 0x%.4X (0x%.4X-0x%.4X allowed)",tOPCode,OFF_ADDR_USER_START,OFF_ADDR_USER_END);
-      return(RET_ERR_INVALID_JUMP_ADDRESS);
+      iRc|=RET_ERR_INVALID_JUMP_ADDRESS;
+      break;
     case 0x2000: /* 0x2nnn, Jump to addr, as a subroutine */
       tOPCode&=0xFFF;
       TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0x2NNN,
@@ -691,13 +728,16 @@ int chip8_Process(TagEmulator *pEmulator)
           TRACE_DBG_INFO_VARG("Storing Current Programmcounter (0x%.4X) @Stack: 0x%.4X",REG_PC,REG_PTR_STACK);
           REG_PC=tOPCode;
           REG_STACKPTR_1DOWN(REG_PTR_STACK); /* Move stackpointer 1 level down */
-          return(RET_CHIP8_OPCODE_OK); /* Return immediately, no increment of PC needed */
+          tOPCode=0xFFFF;  /* No increment of PC needed */
+          break;
         }
         TRACE_DBG_ERROR_VARG("CALL failed, max emulator nested calls reached (%u allowed)",OFF_ADDR_STACK_END-OFF_ADDR_STACK_START+1);
-        return(RET_ERR_STACK_MAX_CALLS);
+        iRc|=RET_ERR_STACK_MAX_CALLS;
+        break;
       }
       TRACE_DBG_ERROR_VARG("CALL failed, tried to jump to addr 0x%.4X (0x%.4X-0x%.4X allowed)",tOPCode,OFF_ADDR_USER_START,OFF_ADDR_USER_END);
-      return(RET_ERR_INVALID_JUMP_ADDRESS);
+      iRc|=RET_ERR_INVALID_JUMP_ADDRESS;
+      break;
     case 0x3000: /* 0x3xkk, Compare Reg x with value kk, if equal -> Skip next instruction */
       tRegX=(tOPCode&0x0F00)>>8;
       tOPCode&=0x00FF;
@@ -724,7 +764,10 @@ int chip8_Process(TagEmulator *pEmulator)
       break;
     case 0x5000: /* 0x5xy0, Compare Reg x with Reg y, if values are equal -> Skip next instruction */
       if(tOPCode&0x000F) /* Nibble must be 0 */
-        return(RET_ERR_INSTRUCTION_UNKNOWN);
+      {
+        iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+        break;
+      }
       tRegX=(tOPCode&0x0F00)>>8;
       tRegY=(tOPCode&0x00F0)>>4;
       TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0x5XY0,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegY,tRegX,tRegY);
@@ -825,12 +868,16 @@ int chip8_Process(TagEmulator *pEmulator)
             REG_VX(tRegX)<<=1;
           break;
         default:
-          return(RET_ERR_INSTRUCTION_UNKNOWN);
+          iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+          break;
       }
       break;
     case 0x9000: /* 0x9xy0, Compare Reg x with Reg y, if values are not equal -> Skip next instruction */
       if(tOPCode&0x000F) /* Nibble must be 0 */
-        return(RET_ERR_INSTRUCTION_UNKNOWN);
+      {
+        iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+        break;
+      }
       tRegX=(tOPCode&0x0F00)>>8;
       tRegY=(tOPCode&0x00F0)>>4;
       TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0x9XY0,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegY,tRegX,REG_VX(tRegX),tRegY,REG_VX(tRegY));
@@ -860,10 +907,12 @@ int chip8_Process(TagEmulator *pEmulator)
       if(MEM_JMP_ADDR_VALID(tOPCode))
       {
         REG_PC=tOPCode;
-        return(RET_CHIP8_OPCODE_OK); /* Return immediately, no increment of PC needed */
+        tOPCode=0xFFFF;  /* No increment of PC needed */
+        break;
       }
       TRACE_DBG_ERROR_VARG("JMP failed, addr 0x%.4X not valid",tOPCode);
-      return(RET_ERR_INVALID_JUMP_ADDRESS);
+      iRc|=RET_ERR_INVALID_JUMP_ADDRESS;
+      break;
     case 0xC000: /* 0xCxkk, Generate random number, AND with val kk and store in Reg_Vx */
       tRegX=(tOPCode&0x0F00)>>8;
       tOPCode&=0x00FF;
@@ -874,43 +923,47 @@ int chip8_Process(TagEmulator *pEmulator)
       tRegX=(tOPCode&0x0F00)>>8;
       tRegY=(tOPCode&0x00F0)>>4;
       tOPCode&=0x000F;
-      if(tOPCode)
+
+      if(!tOPCode)
       {
-        TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0xDXYN,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegY,tOPCode,tOPCode,tRegX,REG_VX(tRegX),tRegY,REG_VX(tRegY));
-        if((iRc=iChip8_Sprite_m(pEmulator,
-                                REG_VX(tRegX),
-                                REG_VX(tRegY),
-                                tOPCode))!=RET_CHIP8_OPCODE_OK)
-        {
-          TRACE_DBG_ERROR("iChip8_Sprite_m() failed to draw Screen");
-          return(iRc);
-        }
-      }
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
-      else
-      {
-        TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0xDXY0,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegY,tRegX,REG_VX(tRegX),tRegY,REG_VX(tRegY));
-        if(!pEmulator->tagWindow.info.exModeOn)
+        iRc=RET_SUCHIP_OPCODE;
+        if(pEmulator->tagWindow.info.exModeOn) /* On extended mode, draw 16x16 sprite */
         {
-          TRACE_DBG_ERROR("Can't use Superchip draw instruction on normal screen mode!");
-          return(RET_ERR_SCREEN_DRAW);
+          TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0xDXY0,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegY,tRegX,REG_VX(tRegX),tRegY,REG_VX(tRegY));
+          if((iRc|=iSuperchip_Sprite_m(pEmulator,
+                                       REG_VX(tRegX),
+                                       REG_VX(tRegY))) != RET_SUCHIP_OPCODE)
+          {
+            TRACE_DBG_ERROR("iSuperchip_Sprite_m() failed to draw Screen");
+          }
+          break; /* Break here, no more stuff tbd in switch */
         }
-        if((iRc=iSuperchip_Sprite_m(pEmulator,
-                                    REG_VX(tRegX),
-                                    REG_VX(tRegY)))!=RET_SUCHIP_OPCODE_OK)
-        {
-          TRACE_DBG_ERROR("iSuperchip_Sprite_m() failed to draw Screen");
-          return(iRc);
-        }
-      }
+        else
+          tOPCode=16;
+#else
+        /* a value of 0 is invalid without superchip instructions enabled */
+        TRACE_DBG_ERROR("Drawing Error, a value of n=0 is invalid without Superchip instructions enabled");
+        iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+        break;
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
+      }
+      TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0xDXYN,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegY,tOPCode,tOPCode,tRegX,REG_VX(tRegX),tRegY,REG_VX(tRegY));
+      if((iRc|=iChip8_Sprite_m(pEmulator,
+                               REG_VX(tRegX),
+                               REG_VX(tRegY),
+                               tOPCode)) != RET_CHIP8_OPCODE)
+      {
+        TRACE_DBG_ERROR("iChip8_Sprite_m() failed to draw Screen");
+      }
       break;
     case 0xE000: /* Keypress stuff */
       tRegX=(tOPCode&0x0F00)>>8;
       if(REG_VX(tRegX)>0xF) /* Check for invalid key */
       {
         TRACE_DBG_ERROR_VARG("Invalid Key in REG_V%X: %X, allowed: 0-F",tRegX,REG_VX(tRegX));
-        return(RET_ERR_KEYCODE_INVALID);
+        iRc|=RET_ERR_KEYCODE_INVALID;
+        break;
       }
       switch((tOPCode&0x00FF))
       {
@@ -935,7 +988,8 @@ int chip8_Process(TagEmulator *pEmulator)
           TRACE_DBG_INFO("Key is not released");
           break;
         default:
-          return(RET_ERR_INSTRUCTION_UNKNOWN);
+          iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+          break;
       }
       break;
     case 0xF000: /* Misc stuff */
@@ -950,7 +1004,7 @@ int chip8_Process(TagEmulator *pEmulator)
           TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0xFX0A,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegX);
           if(iChip8_GetPressedKey_m(&pEmulator->tagKeyboard,
                                     &REG_VX(tRegX)))
-            return(RET_CHIP8_OPCODE_OK); /* If no key is pressed, return and call this again */
+            tOPCode=0xFFFF;  /* No increment of PC needed, call this again */
           break;
         case CHIP8_CMD_DELAY_TIMER_SET: /* 0xFx15, Set DelayTimer= REG_Vx */
           TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0xFX15,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegX,REG_VX(tRegX));
@@ -968,7 +1022,8 @@ int chip8_Process(TagEmulator *pEmulator)
           if((tOPCode=REG_VX(tRegX))>0xF)
           {
             TRACE_DBG_ERROR_VARG("Can't set REG_I to Sprite, Number 0x%.2X out of bounds (0-F allowed)",REG_VX(tRegX));
-            return(RET_ERR_FONT_OUT_OF_INDEX);
+            iRc|=RET_ERR_FONT_OUT_OF_INDEX;
+            break;
           }
           TRACE_CHIP8_INSTR(TXT_INSTRUCTION_0xFX29,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegX,REG_VX(tRegX));
           REG_I=(tOPCode*5)+OFF_ADDR_FONT_START;
@@ -976,15 +1031,16 @@ int chip8_Process(TagEmulator *pEmulator)
           break;
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
         case SUCHIP_CMD_I_XSPRITE_GET:
+          iRc=RET_SUCHIP_OPCODE;
           if((tOPCode=REG_VX(tRegX))>0xF)
           {
             TRACE_DBG_ERROR_VARG("Can't set REG_I to Sprite, Number 0x%.2X out of bounds (0-F allowed)",REG_VX(tRegX));
-            return(RET_ERR_FONT_OUT_OF_INDEX);
+            iRc|=RET_ERR_FONT_OUT_OF_INDEX;
+            break;
           }
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0xFX30,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegX,REG_VX(tRegX));
           REG_I=(tOPCode*10)+OFF_ADDR_XFONT_START;
           TRACE_DBG_INFO_VARG("Setting I on Pos for XSprite '%X'@0x%.4X",REG_VX(tRegX),REG_I);
-          iRc=RET_SUCHIP_OPCODE_OK;
           break;
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
         case CHIP8_CMD_VX_GET_BCD: /* 0xFx33, Store BCD val of REG_Vx in REG_I-REG_I+2 */
@@ -1023,7 +1079,8 @@ int chip8_Process(TagEmulator *pEmulator)
              (REG_I+tRegX>OFF_ADDR_USER_END))
           {
             TRACE_DBG_ERROR("Can't store Registers, memory would overflow");
-            return(RET_ERR_MEM_WOULD_OVERFLOW);
+            iRc|=RET_ERR_MEM_WOULD_OVERFLOW;
+            break;
           }
           for(tOPCode=0;tOPCode<=tRegX;++tOPCode)
           {
@@ -1052,7 +1109,8 @@ int chip8_Process(TagEmulator *pEmulator)
              (REG_I+tRegX>OFF_ADDR_USER_END))
           {
             TRACE_DBG_ERROR("Can't read memory, invalid address");
-            return(RET_ERR_MEM_WOULD_OVERFLOW);
+            iRc|=RET_ERR_MEM_WOULD_OVERFLOW;
+            break;
           }
           for(tOPCode=0;tOPCode<=tRegX;++tOPCode)
           {
@@ -1069,29 +1127,62 @@ int chip8_Process(TagEmulator *pEmulator)
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
         case SUCHIP_CMD_STORE_TO_RPL:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0xFX75,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegX);
-
-          iRc=RET_SUCHIP_OPCODE_OK;
+          iRc=RET_SUCHIP_OPCODE;
+          if(tRegX > OFF_REG_RPL_END-OFF_REG_RPL_START-1) /* Must be less than 8 */
+          {
+            TRACE_DBG_ERROR_VARG("Can't store Values to RPL: Would overflow (max index: %X, is: %X)",
+                                 OFF_REG_RPL_END-OFF_REG_RPL_START-1,
+                                 tRegX);
+            iRc|=RET_ERR_MEM_WOULD_OVERFLOW;
+            break;
+          }
+          for(tOPCode=0;tOPCode <= tRegX;++tOPCode)
+          {
+            TRACE_DBG_INFO_VARG("Store Value from V%X(=0x%.2X) @ RPL%X",
+                                tOPCode,
+                                REG_VX(tOPCode),
+                                tOPCode);
+            REG_RPLX(tOPCode)=REG_VX(tOPCode);
+          }
           break;
         case SUCHIP_CMD_READ_FROM_RPL:
           TRACE_SUCHIP_INSTR(TXT_INSTRUCTION_0xFX85,REG_PC,pEmulator->tCurrOPCode,tRegX,tRegX);
-
-          iRc=RET_SUCHIP_OPCODE_OK;
+          iRc=RET_SUCHIP_OPCODE;
+          if(tRegX > OFF_REG_RPL_END-OFF_REG_RPL_START-1) /* Must be less than 8 */
+          {
+            TRACE_DBG_ERROR_VARG("Can't read Values from RPL: Would overflow (max index: %X, is: %X)",
+                                 OFF_REG_RPL_END-OFF_REG_RPL_START-1,
+                                 tRegX);
+            iRc|=RET_ERR_MEM_WOULD_OVERFLOW;
+            break;
+          }
+          for(tOPCode=0;tOPCode <= tRegX;++tOPCode)
+          {
+            TRACE_DBG_INFO_VARG("Read Value from RPL%X(=0x%.2X) @ V%X",
+                                tOPCode,
+                                REG_RPLX(tOPCode),
+                                tOPCode);
+            REG_VX(tOPCode)=REG_RPLX(tOPCode);
+          }
           break;
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
         default:
-          return(RET_ERR_INSTRUCTION_UNKNOWN);
+          iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+          break;
       }
       break;
     default:
-      return(RET_ERR_INSTRUCTION_UNKNOWN);
+      iRc=RET_ERR_INSTRUCTION_UNKNOWN;
+      break;
   }
-  REG_PROGRAMCOUNTER_INCREMENT();
+  if(tOPCode != 0xFFFF)
+    REG_PROGRAMCOUNTER_INCREMENT();
   return(iRc);
 }
 
 INLINE_FCT byte tChip8_GetRand_m(void)
 {
-  return(rand()/(RAND_MAX/UCHAR_MAX));
+  return(rand()/((RAND_MAX/(UCHAR_MAX+1))-1)); /* Generate number between 0-255 */
 }
 
 INLINE_FCT void vChip8_ShiftRight_m(byte *pData,
@@ -1103,16 +1194,13 @@ INLINE_FCT void vChip8_ShiftRight_m(byte *pData,
   /* At first shift, don't add low part */
   --uiDataLength;
   tTmp1=(pData[uiDataLength]&(0xFF>>(8-iShift))); /* Keep low part */
-//printf("Shift data[%u]=0x%.2X, got tmp: 0x%.2X\n",uiDataLength,pData[uiDataLength],tTmp1);
   pData[uiDataLength]>>=iShift;
   do
   {
     --uiDataLength;
     tTmp1=(pData[uiDataLength]&(0xFF>>(8-iShift))); /* Keep low part */
-//  printf("Shift data[%u]=0x%.2X, got tmp: 0x%.2X\n",uiDataLength,pData[uiDataLength],tTmp1);
     pData[uiDataLength]>>=iShift;
     pData[uiDataLength+1]|=tTmp1<<(8-iShift); /* Add low part to next byte */
-//  printf("Shifted data[%u]=0x%.2X\n",uiDataLength,pData[uiDataLength]);
   }while(uiDataLength);
 }
 
@@ -1127,7 +1215,6 @@ INLINE_FCT void vChip8_ShiftLeft_m(byte *pData,
   for(uiIndex=1;uiIndex<uiDataLength;++uiIndex)
   {
     tTmp1=pData[uiIndex]&(0xFF<<(8-iShift)); /* Keep high part */
-//  printf("Shift data[%u]=0x%.2X, got tmp: 0x%.2X\n",uiIndex,pData[uiIndex],tTmp1);
     pData[uiIndex]<<=iShift;
     pData[uiIndex-1]|=((tTmp1)>>(8-iShift));
   }
@@ -1185,14 +1272,13 @@ INLINE_FCT int iChip8_Sprite_m(TagEmulator *pEmulator,
     }
     tLastVal|=MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX,tPosY+uiIndex);
 
-    fprintf(stderr,"1: Last Val: 0x%.2X\n",tLastVal);
     if((tPosX+8u<uiScreenWidth) && (tPosX&0x7))
     {
       tLastVal|=(MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+8,tPosY+uiIndex)<<8);
     }
     tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex])>>(tPosX&0x7);
     MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX,tPosY+uiIndex)^=(tCurrVal);
-    fprintf(stderr,"2: Last Val: 0x%.2X\n",tLastVal);
+
     if((tPosX+8u<uiScreenWidth) && (tPosX&0x7))
     {
       tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex] & (0xFF>>(8-(tPosX&0x7)))) << (16-(tPosX&0x7));
@@ -1210,7 +1296,7 @@ INLINE_FCT int iChip8_Sprite_m(TagEmulator *pEmulator,
       REG_VF=1;
     }
   }
-  return(RET_CHIP8_OPCODE_OK);
+  return(RET_ERR_NONE);
 }
 
 
@@ -1250,12 +1336,12 @@ INLINE_FCT int iSuperchip_Sprite_m(TagEmulator *pEmulator,
     {
       tLastVal|=(MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+8,tPosY+uiIndex)<<8);
     }
-    tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex])>>(tPosX&0x7);
+    tCurrVal|=(pEmulator->taChipMemory[REG_I+(uiIndex*2)])>>(tPosX&0x7);
     MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX,tPosY+uiIndex)^=(tCurrVal);
 
     if((tPosX+8u<SUCHIP_SCREEN_WIDTH) && (tPosX&0x7))
     {
-      tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex] & (0xFF>>(8-(tPosX&0x7)))) << (16-(tPosX&0x7));
+      tCurrVal|=(pEmulator->taChipMemory[REG_I+(uiIndex*2)] & (0xFF>>(8-(tPosX&0x7)))) << (16-(tPosX&0x7));
       MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+8u,tPosY+uiIndex)^=tCurrVal>>8;
     }
     if((!REG_VF) &&
@@ -1267,11 +1353,11 @@ INLINE_FCT int iSuperchip_Sprite_m(TagEmulator *pEmulator,
     tLastVal=0;
     tCurrVal=0;
     tLastVal=MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+8,tPosY+uiIndex);
-    if((tPosX+16u<SUCHIP_SCREEN_WIDTH) && (tPosX&0x7))
+    if((tPosX+16u<SUCHIP_SCREEN_WIDTH) && ((tPosX+8)&0x7))
     {
       tLastVal|=(MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+16,tPosY+uiIndex)<<8);
     }
-    tCurrVal|=(pEmulator->taChipMemory[REG_I+uiIndex])>>(tPosX&0x7);
+    tCurrVal|=(pEmulator->taChipMemory[REG_I+(uiIndex*2)+1])>>((tPosX+8)&0x7);
     MEM_SCREEN_BYTE(pEmulator->tagWindow,tPosX+8,tPosY+uiIndex)^=(tCurrVal);
 
     if((tPosX+8u<SUCHIP_SCREEN_WIDTH) && (tPosX&0x7))
@@ -1285,7 +1371,7 @@ INLINE_FCT int iSuperchip_Sprite_m(TagEmulator *pEmulator,
       REG_VF=1;
     }
   }
-  return(RET_SUCHIP_OPCODE_OK);
+  return(RET_ERR_NONE);
 }
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
 
@@ -1359,46 +1445,63 @@ INLINE_FCT void vChip8_MemoryInit_m(byte *pMem,
   pMem[wStartAddress++]=0xFF;
   pMem[wStartAddress++]=0x00;
   pMem[wStartAddress++]=0xE0;
-  pMem[wStartAddress++]=0xD1; /* drw1*/
-  pMem[wStartAddress++]=0x24;
+  pMem[wStartAddress++]=0xD2; /* drw1*/
+  pMem[wStartAddress++]=0x40;
 
-  pMem[wStartAddress++]=0xA3; /* LD i */
-  pMem[wStartAddress++]=0x04;
+//pMem[wStartAddress++]=0xA3; /* LD i */
+//pMem[wStartAddress++]=0x00;
+//
+//pMem[wStartAddress++]=0xD0; /* drw2 */
+//pMem[wStartAddress++]=0x24;
 
-  pMem[wStartAddress++]=0xD3; /* drw2 */
-  pMem[wStartAddress++]=0x24;
-
-  pMem[wStartAddress++]=0xA3; /* LD i */
-  pMem[wStartAddress++]=0x08;
-
-  pMem[wStartAddress++]=0xD4; /* drw2 */
-  pMem[wStartAddress++]=0x24;
-
-  pMem[wStartAddress++]=0x00;
-  pMem[wStartAddress++]=0xC4; /* SCD */
+//pMem[wStartAddress++]=0xA3; /* LD i */
+//pMem[wStartAddress++]=0x08;
+//
+//pMem[wStartAddress++]=0xD4; /* drw2 */
+//pMem[wStartAddress++]=0x24;
+//
+//pMem[wStartAddress++]=0x00;
+//pMem[wStartAddress++]=0xC4; /* SCD */
 
 //pMem[wStartAddress++]=0x00;
 //pMem[wStartAddress++]=0xFC; /* SCL */
 
   REG_I=0x300;
   pMem[0x300]=0xAA;
-  pMem[0x301]=0x55;
-  pMem[0x302]=0x00;
+  pMem[0x301]=0xFF;
+  pMem[0x302]=0xAA;
   pMem[0x303]=0xFF;
-  pMem[0x304]=0xFF;
-  pMem[0x305]=0x00;
-  pMem[0x306]=0x55;
+  pMem[0x304]=0xAA;
+  pMem[0x305]=0xAA;
+  pMem[0x306]=0xAA;
   pMem[0x307]=0xAA;
 
-  pMem[0x308]=0xFF;
-  pMem[0x309]=0x55;
+  pMem[0x308]=0xAA;
+  pMem[0x309]=0xAA;
   pMem[0x30A]=0xAA;
-  pMem[0x30B]=0xFF;
-  pMem[0x30C]=0x00;
-  pMem[0x30D]=0xFF;
-  pMem[0x30E]=0x55;
+  pMem[0x30B]=0xAA;
+  pMem[0x30C]=0xAA;
+  pMem[0x30D]=0xAA;
+  pMem[0x30E]=0xAA;
   pMem[0x30F]=0xAA;
 
+  pMem[0x300]=0xAA;
+  pMem[0x301]=0xFF;
+  pMem[0x302]=0xAA;
+  pMem[0x303]=0xFF;
+  pMem[0x304]=0xAA;
+  pMem[0x305]=0xAA;
+  pMem[0x306]=0xAA;
+  pMem[0x307]=0xAA;
+
+  pMem[0x308]=0xAA;
+  pMem[0x309]=0xAA;
+  pMem[0x30A]=0xAA;
+  pMem[0x30B]=0xAA;
+  pMem[0x30C]=0xAA;
+  pMem[0x30D]=0xAA;
+  pMem[0x30E]=0xAA;
+  pMem[0x30F]=0xFF;
 
 #endif
 }

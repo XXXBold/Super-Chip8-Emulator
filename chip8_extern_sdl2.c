@@ -91,12 +91,6 @@ const char *pcChip8_GetReturnCodeText_m(int iRc)
 {
   switch(iRc)
   {
-    case RET_CHIP8_OPCODE_OK:
-      return("Chip-8 Instruction executed");
-    case RET_SUCHIP_OPCODE_OK:
-      return("SuperChip Instruction executed");
-    case RET_PGM_EXIT:
-      return("ROM requested exit");
     case RET_ERR_INVALID_JUMP_ADDRESS:
       return("Address invalid, not in Userspace");
     case RET_ERR_MEM_WOULD_OVERFLOW:
@@ -164,6 +158,9 @@ INLINE_FCT int iThreadEmu_UpdateSettings_m(TagEmulator *pEmulator,
   {
     switch(pEmulator->tagThrdEmu.eSpeed)
     {
+      case EMU_SPEED_0_25X:
+        *pExecDelayPerfCounts=SDL_GetPerformanceFrequency() / (CHIP8_FREQ_RUN_HZ/4) + 0.5;
+        break;
       case EMU_SPEED_0_5X:
         *pExecDelayPerfCounts=SDL_GetPerformanceFrequency() / (CHIP8_FREQ_RUN_HZ/2) + 0.5;
         break;
@@ -175,6 +172,12 @@ INLINE_FCT int iThreadEmu_UpdateSettings_m(TagEmulator *pEmulator,
         break;
       case EMU_SPEED_2_0X:
         *pExecDelayPerfCounts=SDL_GetPerformanceFrequency() / (CHIP8_FREQ_RUN_HZ*2) + 0.5;
+        break;
+      case EMU_SPEED_5_0X:
+        *pExecDelayPerfCounts=SDL_GetPerformanceFrequency() / (CHIP8_FREQ_RUN_HZ*5) + 0.5;
+        break;
+      case EMU_SPEED_10_0X:
+        *pExecDelayPerfCounts=SDL_GetPerformanceFrequency() / (CHIP8_FREQ_RUN_HZ*10) + 0.5;
         break;
       default:
         TRACE_DBG_ERROR("Invalid Speed factor selected, changing to default (=1.0)");
@@ -191,6 +194,7 @@ INLINE_FCT int iThreadEmu_UpdateSettings_m(TagEmulator *pEmulator,
   }
   if(pEmulator->updateSettings.emu_Pause)
   {
+    vChip8_Sound_Stop_m(&pEmulator->tagPlaySound); /* Make sure to stop sound playback */
     pEmulator->tagThrdEmu.eEmuState=EMU_STATE_PAUSE;
     pEmulator->updateSettings.emu_Pause=0;
   }
@@ -316,7 +320,7 @@ int iThread_EmuProcess_m(void* data)
         if(!uiPFCLast)
           uiPFCLast=uiPFCCurrent;
         /* Check if timer decrement is needed */
-        if(uiExecutionsCount%(CHIP8_FREQ_RUN_HZ/CHIP8_FREQ_TIMER_DELAY_HZ) == 0)
+        if(uiExecutionsCount % (CHIP8_FREQ_RUN_HZ / CHIP8_FREQ_TIMER_DELAY_HZ) == 0)
         {
           if(REG_TMRDEL)
             --REG_TMRDEL;
@@ -325,36 +329,54 @@ int iThread_EmuProcess_m(void* data)
         }
         /* Execute Next OPCode */
         iRc=pEmulator->tagThrdEmu.procFunc(pEmulator);
-//      fprintf(stderr,"Executed, uiPFCLast %zu, current: %zu, procdel: %zu\n",uiPFCLast,uiPFCCurrent,uiPFCProcessDelay);   // TODO: remove this
-        switch(iRc)
+        if((iRc & RET_ERROR_MASK)) /* Check if any error occured */
         {
-          case RET_CHIP8_OPCODE_OK: /* No error, continue... */
+          TRACE_DBG_ERROR_VARG("Execute Instruction (0x%.4X) returned 0x%.4X: %s\n",
+                               pEmulator->tCurrOPCode,
+                               iRc,
+                               pcChip8_GetReturnCodeText_m((iRc & RET_ERROR_MASK)));
+          if((iRc & RET_ERR_INSTRUCTION_UNKNOWN))
+          {
+            if(!EMU_CHECK_QUIRK(pEmulator,EMU_QUIRK_SKIP_INSTRUCTIONS_UNKNOWN))
+            {
+              EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_ERR_INSTRUCTION_UNKNOWN);
+              pEmulator->tagThrdEmu.eEmuState=EMU_STATE_ERR_UNKNOWN_INSTRUCTION;
+            }
+          }
+          else
+          {
+            if(!EMU_CHECK_QUIRK(pEmulator,EMU_QUIRK_SKIP_INSTRUCTIONS_INVALID))
+            {
+              EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_ERR_INVALID_INSTRUCTION);
+              pEmulator->tagThrdEmu.eEmuState=EMU_STATE_ERR_INVALID_INSTRUCTION;
+            }
+          }
+          break;
+        }
+        if((iRc & RET_PGM_EXIT) || (iRc & RET_END_OF_MEMORY)) /* Check if End of memory was reached or exit requested */
+        {
+          TRACE_DBG_INFO("Exit requested by rom or end of memory reached, pausing thread...");
+          pEmulator->tagThrdEmu.eEmuState=EMU_STATE_PAUSE;
+          EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_PROGRAM_EXIT);
+          break;
+        }
+        switch(iRc & 0xF000)
+        {
+          case RET_CHIP8_OPCODE: /* No error, continue... */
             ++uiExecutionsCount;
             EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_CHIP8_INSTRUCTION_EXECUTED);
             break;
 #ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
-          case RET_SUCHIP_OPCODE_OK:
+          case RET_SUCHIP_OPCODE:
             ++uiExecutionsCount;
             EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED);
             break;
 #endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
-          case RET_PGM_EXIT:
-            TRACE_DBG_INFO("Exit requested by rom, pausing thread...");
-            pEmulator->tagThrdEmu.eEmuState=EMU_STATE_PAUSE;
-            EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_PROGRAM_EXIT);
+          default: /* invalid state, pause execution */
+            TRACE_DBG_ERROR_VARG("Internal Error: Invalid state in Statemachine (0x%.4X), stopping...",iRc);
+            EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_ERR_INTERNAL);
+            pEmulator->tagThrdEmu.eEmuState=EMU_STATE_ERR_INTERNAL;
             break;
-          default: /* Some error occured, stop execution */
-            TRACE_DBG_ERROR_VARG("Execute Instruction (0x%.4X) Error: %d: %s\n",pEmulator->tCurrOPCode,iRc,pcChip8_GetReturnCodeText_m(iRc));
-            pEmulator->tagThrdEmu.eEmuState=EMU_STATE_ERROR_INSTRUCTION;
-            /* Also signal the updatethread to pause */
-            if(iRc==RET_ERR_INSTRUCTION_UNKNOWN)
-            {
-              EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_INSTRUCTION_UNKNOWN);
-            }
-            else
-            {
-              EMU_CALL_USER_EVENT(pEmulator,EMU_EVT_INSTRUCTION_ERROR);
-            }
         }
         uiPFCLast+=uiPFCProcessDelay;
         if(uiPFCLast > (uiPFCCurrent-uiPFCProcessDelay))
@@ -369,7 +391,9 @@ int iThread_EmuProcess_m(void* data)
         }
         break;
       case EMU_STATE_PAUSE:
-      case EMU_STATE_ERROR_INSTRUCTION:
+      case EMU_STATE_ERR_INVALID_INSTRUCTION:
+      case EMU_STATE_ERR_UNKNOWN_INSTRUCTION:
+      case EMU_STATE_ERR_INTERNAL:
         /* Wait while thread is paused or an error is indicated */
         uiPFCLast=0;
         SDL_Delay(20);
@@ -435,7 +459,7 @@ INLINE_FCT int iChip8_Screen_Init_m(TagWindow *pWinData)
     TRACE_DBG_ERROR_VARG("SDL_CreateWindow() failed: %s",SDL_GetError());
     return(-1);
   }
-  if(!(pWinData->pRenderer=SDL_CreateRenderer(pWinData->pWindow,-1,SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE)))
+  if(!(pWinData->pRenderer=SDL_CreateRenderer(pWinData->pWindow,-1,SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE | SDL_RENDERER_PRESENTVSYNC)))
   {
     TRACE_DBG_ERROR_VARG("SDL_CreateRenderer() failed: %s",SDL_GetError());
     SDL_DestroyWindow(pWinData->pWindow);

@@ -23,37 +23,22 @@
 #endif /* GUI_DEBUG_TRACE */
 
 #define APP_VERSION_MAJOR     0
-#define APP_VERSION_MINOR     3
-#define APP_VERSION_PATCH     1
+#define APP_VERSION_MINOR     4
+#define APP_VERSION_PATCH     0
 #define APP_VERSION_BUILDTIME "Build: " __DATE__ ", " __TIME__
 #define APP_DISPLAY_NAME      "Chip-8_Emulator"
 #define APP_VERSION_DEVSTATE  "Beta"
-#define APP_PROJECT_HOMEPAGE  "https://github.com/XXXBold/Chip8Emulator"
+#define APP_PROJECT_HOMEPAGE  "https://github.com/XXXBold/Super-Chip8-Emulator"
 #define APP_PROJECT_DEVELOPER "XXXBold"
+#ifdef __i386__
+  #define APP_VERSION_ARCH "32-bit"
+#elif __x86_64__
+  #define APP_VERSION_ARCH "64-bit"
+#else
+  #define APP_VERSION_ARCH "\?\?-bit"
+#endif
 
 #define MY_WINDOW_SCALE 10u
-
-#define CFG_TXT_GROUP_KEYMAP      "Keymap"
-#define CFG_TXT_GROUP_PATHS       "Paths"
-
-#define CFG_TXT_KEY_KEYMAP_0      "Key0"
-#define CFG_TXT_KEY_KEYMAP_1      "Key1"
-#define CFG_TXT_KEY_KEYMAP_2      "Key2"
-#define CFG_TXT_KEY_KEYMAP_3      "Key3"
-#define CFG_TXT_KEY_KEYMAP_4      "Key4"
-#define CFG_TXT_KEY_KEYMAP_5      "Key5"
-#define CFG_TXT_KEY_KEYMAP_6      "Key6"
-#define CFG_TXT_KEY_KEYMAP_7      "Key7"
-#define CFG_TXT_KEY_KEYMAP_8      "Key8"
-#define CFG_TXT_KEY_KEYMAP_9      "Key9"
-#define CFG_TXT_KEY_KEYMAP_A      "KeyA"
-#define CFG_TXT_KEY_KEYMAP_B      "KeyB"
-#define CFG_TXT_KEY_KEYMAP_C      "KeyC"
-#define CFG_TXT_KEY_KEYMAP_D      "KeyD"
-#define CFG_TXT_KEY_KEYMAP_E      "KeyE"
-#define CFG_TXT_KEY_KEYMAP_F      "KeyF"
-
-#define CFG_TXT_KEY_LAST_SEL_PATH "LastLoadPath"
 
 enum appConfigIndex
 {
@@ -70,7 +55,8 @@ typedef struct
 class Chip8_GUI : public wxApp
 {
 public:
-  virtual bool OnInit(void);
+  virtual bool OnInit();
+  virtual int OnExit();
   void vApp_GetKeymap(unsigned char ucaKeymap[EMU_KEY_COUNT]);
   void vApp_SetKeymap(unsigned char ucaNewKeymap[EMU_KEY_COUNT]);
 
@@ -78,10 +64,10 @@ public:
   wxString strApp_GetLastLoadPath();
 
   AppConfig appCfg;
-  size_t entriesCount;
   AppConfigEntry taCfgEntries[17];
 private:
   bool bConfigLoad();
+  void vConfigSave();
   void vGetKeymapFromConfig();
   void vSetKeymapToConfig();
 

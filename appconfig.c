@@ -40,6 +40,9 @@
   #define ERR_PRINT_VARGS(str,...)
 #endif /* APPCONFIG_PRINT_ERRORS */
 
+#define INI_PRINT_ERROR(strfunc,errcode) fprintf(stderr,strfunc "() failed (%d): %s\n",errcode,IniFile_GetErrorText(errcode))
+#define APPCFG_PRINT_ERROR(strfunc,errcode) fprintf(stderr,strfunc "() failed (%d): %s\n",errcode,appConfig_GetErrorString(errcode))
+
 enum
 {
   MAX_PATHLEN = 260,
@@ -48,7 +51,9 @@ enum
 struct TagAppConfig_T
 {
   char caPath[MAX_PATHLEN+1];
+  unsigned int uiPathLen;
   AppConfigEntry *pEntries;
+  char *pcEntryData;
   size_t szEntriesCount;
   union StoreMethod_T /* Here add probably more methods for storage, e.g. registry for windows... */
   {
@@ -56,85 +61,117 @@ struct TagAppConfig_T
   }store;
 };
 
-INLINE_PROT int iAppConfig_AssembleDestFolderPath_m(AppConfig pCfg,
+/**
+ * Functions related to storage via Inifile (inifile.c/.h)
+ */
+INLINE_PROT int iAppConfig_Ini_Create_m(AppConfig pCfg);
+INLINE_PROT int iAppConfig_Ini_DataLoad_m(AppConfig pCfg);
+INLINE_PROT int iAppConfig_Ini_DataSave_m(AppConfig pCfg);
+INLINE_PROT void vAppConfig_Ini_Close_m(AppConfig pCfg);
+
+INLINE_PROT int iAppConfig_AssembleDestFolderPath_m(char *pcPathOut,
                                                     unsigned int *puiBufSize,
                                                     const char *pcAppName,
                                                     const char *pcFileName,
                                                     const char *pcLocation);
-INLINE_PROT int iAppConfig_Create_m(AppConfig pCfg);
 INLINE_PROT int iAppConfig_GetDefaultConfigPath_m(char *pcPath,
                                                   unsigned int *uiBufsize);
 INLINE_PROT int iAppConfig_FileExists_m(const char *pcPath);
 INLINE_PROT int iAppConfig_CreateDirIfNotExist_m(const char *pcDir);
-INLINE_PROT int iAppConfig_Inifile_Load_m(AppConfig pCfg);
-INLINE_PROT int iAppConfig_Inifile_Save_m(const AppConfig pCfg);
 
-int appConfig_Load(AppConfig *config,
-                   const char *appName,
-                   AppConfigEntry *entries,
-                   size_t entriesCount,
-                   const char *fileName,
-                   const char *location)
+int appConfig_New(AppConfig *config,
+                  AppConfigEntry *entries,
+                  size_t entriesCount,
+                  const char *appName,
+                  const char *fileName,
+                  const char *location)
 {
   unsigned int uiTmp;
+  int iRc;
 
-  if((!entries) || (!entriesCount))
-    return(APPCONFIG_LOAD_ERROR);
-
-  if(!((*config)=malloc(sizeof(struct TagAppConfig_T))))
+  if(!((*config)=malloc(sizeof(struct TagAppConfig_T)+entriesCount)))
   {
     ERR_PRINT("malloc() failed");
-    return(APPCONFIG_LOAD_ERROR);
+    return(APPCFG_ERR_INTERNAL);
   }
 
   if(!fileName)
     fileName=DEFAULT_FILENAME;
 
   uiTmp=MAX_PATHLEN;
-  if(iAppConfig_AssembleDestFolderPath_m((*config),
-                                         &uiTmp,
-                                         appName,
-                                         fileName,
-                                         location))
+  if((iRc=iAppConfig_AssembleDestFolderPath_m((*config)->caPath,
+                                              &uiTmp,
+                                              appName,
+                                              fileName,
+                                              location)) != APPCFG_ERR_NONE)
   {
-    ERR_PRINT("iAppConfig_AssembleDestFolderPath_m() failed");
+    APPCFG_PRINT_ERROR("iAppConfig_AssembleDestFolderPath_m",iRc);
     free(*config);
-    return(APPCONFIG_LOAD_ERROR);
+    return(iRc);
   }
-  if(iAppConfig_CreateDirIfNotExist_m((*config)->caPath) < 0)
+  if((iRc=iAppConfig_Ini_Create_m(*config)) != APPCFG_ERR_NONE)
   {
-    ERR_PRINT("iAppConfig_CreateDirIfNotExist_m() failed");
+    APPCFG_PRINT_ERROR("iAppConfig_Ini_Create_m",iRc);
     free(*config);
-    return(APPCONFIG_LOAD_ERROR);
+    return(iRc);
   }
-  /* bufferlength is checked in AssembleDestFolderPath, so strcpy is fine */
-  strcpy(&(*config)->caPath[uiTmp],fileName);
   (*config)->pEntries=entries;
   (*config)->szEntriesCount=entriesCount;
+  (*config)->pcEntryData=((char*)(*config))+sizeof(struct TagAppConfig_T);
 
-  if(iAppConfig_Create_m(*config))
-  {
-    ERR_PRINT("iAppConfig_Create_m() failed");
-    free(*config);
-    return(APPCONFIG_LOAD_ERROR);
-  }
-  if(iAppConfig_FileExists_m((*config)->caPath))
-  {
-    /* Load File if it exists */
-    if(iAppConfig_Inifile_Load_m((*config)))
-    {
-      ERR_PRINT("iAppConfig_Inifile_Load_m() failed");
-      free(*config);
-      return(APPCONFIG_LOAD_ERROR);
-    }
-    return(APPCONFIG_LOAD_EXIST);
-  }
-  return(APPCONFIG_LOAD_NEW);
+  /* bufferlength is checked in AssembleDestFolderPath, so strcpy is fine */
+  strcpy(&(*config)->caPath[uiTmp-1],fileName);
+  return(APPCFG_ERR_NONE);
 }
 
-int appConfig_Save(const AppConfig config)
+int appConfig_DataLoad(AppConfig config)
 {
-  return(iAppConfig_Inifile_Save_m(config));
+  if(!config)
+    return(APPCFG_ERR_PARAM);
+
+  return(iAppConfig_Ini_DataLoad_m(config));
+}
+
+int appConfig_DataSave(AppConfig config)
+{
+  return(iAppConfig_Ini_DataSave_m(config));
+}
+
+int appConfig_DataDelete(const AppConfig config)
+{
+  errno=0;
+  if(!config)
+    return(APPCFG_ERR_PARAM);
+
+  if(remove(config->caPath))
+  {
+    ERR_PRINT_VARGS("Failed to delete File \"%s\": %s",config->caPath,strerror(errno));
+    return(APPCFG_ERR_IO);
+  }
+  return(APPCFG_ERR_NONE);
+}
+
+const char *appConfig_GetErrorString(int error)
+{
+  switch(error)
+  {
+    case APPCFG_ERR_NONE:
+      return("No Error");
+    case APPCFG_LOAD_EXISTING:
+      return("Loaded existing Config");
+    case APPCFG_LOAD_NEW:
+      return("Created new config");
+    case APPCFG_ERR_PARAM:
+      return("Invalid Parameter");
+    case APPCFG_ERR_DATA_MALFORMED:
+      return("Data can't be read, is malformed");
+    case APPCFG_ERR_IO:
+      return("I/O Error occured while accessing the data storage");
+    case APPCFG_ERR_INTERNAL:
+      return("Internal Error occured");
+    default:
+      return("Unknown error code");
+  }
 }
 
 const char *appConfig_GetPath(const AppConfig config)
@@ -144,80 +181,245 @@ const char *appConfig_GetPath(const AppConfig config)
 
 void appConfig_Close(AppConfig config)
 {
-  IniFile_Dispose(config->store.iniFile);
+  vAppConfig_Ini_Close_m(config);
   free(config);
 }
 
-INLINE_FCT int iAppConfig_Inifile_Load_m(AppConfig pCfg)
+void appConfig_DumpContents(const AppConfig config,
+                            FILE *fp)
 {
   unsigned int uiIndex;
-  int iRc;
+  unsigned int uiIndexBin;
 
-  if((iRc=IniFile_Read(pCfg->store.iniFile,
-                       pCfg->caPath) != INI_ERR_NONE))
+  for(uiIndex=0;uiIndex < config->szEntriesCount;++uiIndex)
   {
-    ERR_PRINT_VARGS("IniFile_Read() failed with error %d",iRc);
-    return(-1);
-  }
-  /* Read all entries, if they exist in the file */
-  for(uiIndex=0;uiIndex < pCfg->szEntriesCount;++uiIndex)
-  {
-    switch((iRc=IniFile_FindEntry_GetValue(pCfg->store.iniFile,
-                                           pCfg->pEntries[uiIndex].groupName,
-                                           pCfg->pEntries[uiIndex].keyName,
-                                           &pCfg->pEntries[uiIndex].tagData)))
+    switch(config->pEntries[uiIndex].tagData.eType & 0xFF)
     {
-      /* These errors are okay */
-      case INI_ERR_FIND_NONE:
-      case INI_ERR_FIND_SECTION:
-        ERR_PRINT_VARGS("IniFile_FindEntry_GetValue() returned %d: Key \"%s\" in group \"%s\" not found",
-                        iRc,
-                        pCfg->pEntries[uiIndex].keyName,
-                        pCfg->pEntries[uiIndex].groupName);
+      case eDataType_Int:
+        fprintf(fp,
+                "Group: \"%s\", (Int)key: \"%s\"=%d\n",
+                config->pEntries[uiIndex].groupName,
+                config->pEntries[uiIndex].keyName,
+                config->pEntries[uiIndex].tagData.data.iVal);
         break;
-      case INI_ERR_NONE: /* Entry found */
+      case eDataType_Uint:
+        fprintf(fp,
+                "Group: \"%s\", (Uint)key: \"%s\"=%u\n",
+                config->pEntries[uiIndex].groupName,
+                config->pEntries[uiIndex].keyName,
+                config->pEntries[uiIndex].tagData.data.uiVal);
+        break;
+      case eDataType_Double:
+        fprintf(fp,
+                "Group: \"%s\", (Double)key: \"%s\"=%f\n",
+                config->pEntries[uiIndex].groupName,
+                config->pEntries[uiIndex].keyName,
+                config->pEntries[uiIndex].tagData.data.dVal);
+        break;
+      case eDataType_Boolean:
+        fprintf(fp,
+                "Group: \"%s\", (Boolean)key: \"%s\"=%s\n",
+                config->pEntries[uiIndex].groupName,
+                config->pEntries[uiIndex].keyName,
+                (config->pEntries[uiIndex].tagData.data.bVal)?"true":"false");
+        break;
+      case eDataType_String:
+        fprintf(fp,
+                "Group: \"%s\", (String)key: \"%s\"=\"%s\"\n",
+                config->pEntries[uiIndex].groupName,
+                config->pEntries[uiIndex].keyName,
+                config->pEntries[uiIndex].tagData.data.pcVal);
+        break;
+      case eDataType_Binary:
+        fprintf(fp,
+                "Group: \"%s\", (Binary)key: \"%s\"=",
+                config->pEntries[uiIndex].groupName,
+                config->pEntries[uiIndex].keyName);
+        for(uiIndexBin=0;uiIndexBin < config->pEntries[uiIndex].tagData.uiDataSizeUsed;++uiIndexBin)
+          fprintf(fp,"0x%.2X ",config->pEntries[uiIndex].tagData.data.pucVal[uiIndexBin]);
+        putc('\n',fp);
         break;
       default:
-        ERR_PRINT_VARGS("IniFile_FindEntry_GetValue() failed with error %d",iRc);
-        return(-1);
+        printf("Group: \"%s\", (Unknown type)key: \"%s\"=???",
+               config->pEntries[uiIndex].groupName,
+               config->pEntries[uiIndex].keyName);
+        break;
     }
   }
-  /* Got all needed entries, clear inifile data */
-  IniFile_DumpContent(pCfg->store.iniFile);   // TODO: remove this
-  IniFile_Clean(pCfg->store.iniFile);
-  return(0);
 }
 
-INLINE_FCT int iAppConfig_Inifile_Save_m(const AppConfig pCfg)
+INLINE_FCT int iAppConfig_Ini_Create_m(AppConfig pCfg)
+{
+  int iRc;
+  if(iAppConfig_CreateDirIfNotExist_m(pCfg->caPath) < 0)
+  {
+    ERR_PRINT("iAppConfig_CreateDirIfNotExist_m() failed");
+    return(APPCFG_ERR_IO);
+  }
+  if((iRc=IniFile_New(&pCfg->store.iniFile,INI_OPT_CASE_SENSITIVE)) != INI_ERR_NONE)
+  {
+    INI_PRINT_ERROR("IniFile_New",iRc);
+    return(APPCFG_ERR_INTERNAL);
+  }
+  return(APPCFG_ERR_NONE);
+}
+
+INLINE_FCT int iAppConfig_Ini_DataLoad_m(AppConfig pCfg)
+{
+  const char *pcSection;
+  const char *pcKey;
+  unsigned int uiIndex;
+  unsigned int uiEntriesReadCount;
+  int iRc;
+
+  if(!iAppConfig_FileExists_m(pCfg->caPath))
+    return(APPCFG_LOAD_NEW);
+
+  memset(pCfg->pcEntryData,0,pCfg->szEntriesCount);
+  if((iRc=IniFile_Read(pCfg->store.iniFile,
+                       pCfg->caPath)) != INI_ERR_NONE)
+  {
+    INI_PRINT_ERROR("IniFile_Read",iRc);
+    switch(iRc)
+    {
+      case INI_ERR_NONE: /* No error */
+        iRc=APPCFG_LOAD_EXISTING;
+        break;
+      case INI_ERR_MALFORMED:
+        iRc=APPCFG_ERR_DATA_MALFORMED;
+        break;
+      case INI_ERR_IO:
+        iRc=APPCFG_ERR_IO;
+        break;
+      case INI_ERR_INTERNAL:
+      default:
+        iRc=APPCFG_ERR_INTERNAL;
+        break;
+    }
+    return(iRc);
+  }
+
+  uiEntriesReadCount=0;
+  for(pcSection=IniFile_Iterator_SetSectionIndex(pCfg->store.iniFile,ITERATOR_FIRST);
+      pcSection;
+      pcSection=IniFile_Iterator_NextSection(pCfg->store.iniFile))
+  {
+    for(uiIndex=0;uiIndex < pCfg->szEntriesCount;++uiIndex)
+    {
+      if(pCfg->pcEntryData[uiIndex]) /* Skip already read entries */
+        continue;
+
+      if((pCfg->pEntries[uiIndex].groupName) &&
+         (IniFile_StringCompare(pCfg->store.iniFile,pcSection,pCfg->pEntries[uiIndex].groupName) != 0))
+         continue;
+
+      ++uiEntriesReadCount;
+      pCfg->pcEntryData[uiIndex]=1;
+      for(pcKey=IniFile_Iterator_SetKeyIndex(pCfg->store.iniFile,ITERATOR_FIRST);
+          pcKey;
+          pcKey=IniFile_Iterator_NextKey(pCfg->store.iniFile))
+      {
+        if(IniFile_StringCompare(pCfg->store.iniFile,pcKey,pCfg->pEntries[uiIndex].keyName) == 0)
+        {
+          if(((iRc=IniFile_Iterator_KeyGetValue(pCfg->store.iniFile,&pCfg->pEntries[uiIndex].tagData)) != INI_ERR_NONE) &&
+             (iRc != INI_ERR_DATA_EMPTY))
+          {
+            INI_PRINT_ERROR("IniFile_Iterator_KeyGetValue",iRc);
+            switch(iRc)
+            {
+              case INI_ERR_PARAM:
+                return(APPCFG_ERR_PARAM);
+              default:
+                return(APPCFG_ERR_INTERNAL);
+            }
+          }
+          break;
+        }
+      }
+    }
+    if(uiEntriesReadCount == pCfg->szEntriesCount) /* Check if all entries have been read already */
+      break;
+  }
+  /* Got all needed entries, clear inifile data */
+  IniFile_Clean(pCfg->store.iniFile);
+  return(APPCFG_LOAD_EXISTING);
+}
+
+INLINE_FCT int iAppConfig_Ini_DataSave_m(AppConfig pCfg)
 {
   unsigned int uiIndex;
   int iRc;
+
   for(uiIndex=0;uiIndex < pCfg->szEntriesCount;++uiIndex)
   {
-    switch((iRc=IniFile_CreateEntry_SetValue(pCfg->store.iniFile,
-                                             pCfg->pEntries[uiIndex].groupName,
-                                             pCfg->pEntries[uiIndex].keyName,
-                                             &pCfg->pEntries[uiIndex].tagData)))
+    if(pCfg->pEntries[uiIndex].groupName)
     {
-      case INI_ERR_NONE: /* Okay */
-        break;
-      default: /* some Error occured, indicate error... */
-        ERR_PRINT_VARGS("Failed to set val for Key %s in group %s with error %d",
-                        pCfg->pEntries[uiIndex].keyName,
-                        pCfg->pEntries[uiIndex].groupName,
-                        iRc);
-        return(-1);
+      if((iRc=IniFile_Iterator_CreateSection(pCfg->store.iniFile,pCfg->pEntries[uiIndex].groupName)) != INI_ERR_NONE)
+      {
+        INI_PRINT_ERROR("IniFile_Iterator_CreateSection",iRc);
+        switch(iRc)
+        {
+          case INI_ERR_PARAM:
+            return(APPCFG_ERR_PARAM);
+          case INI_ERR_INTERNAL:
+          default:
+            return(APPCFG_ERR_INTERNAL);
+        }
+      }
+    }
+    else
+    {
+      IniFile_Iterator_SetSectionIndex(pCfg->store.iniFile,ITERATOR_FIRST);
+    }
+
+    if((iRc=IniFile_Iterator_CreateKey(pCfg->store.iniFile,pCfg->pEntries[uiIndex].keyName)) != INI_ERR_NONE)
+    {
+      INI_PRINT_ERROR("IniFile_Iterator_CreateKey",iRc);
+      switch(iRc)
+      {
+        case INI_ERR_PARAM:
+          return(APPCFG_ERR_PARAM);
+        case INI_ERR_INTERNAL:
+        default:
+          return(APPCFG_ERR_INTERNAL);
+      }
+    }
+    if((iRc=IniFile_Iterator_KeySetValue(pCfg->store.iniFile,&pCfg->pEntries[uiIndex].tagData)) != INI_ERR_NONE)
+    {
+      INI_PRINT_ERROR("IniFile_Iterator_KeySetValue",iRc);
+      switch(iRc)
+      {
+        case INI_ERR_PARAM:
+          return(APPCFG_ERR_PARAM);
+        case INI_ERR_INTERNAL:
+        default:
+          return(APPCFG_ERR_INTERNAL);
+      }
     }
   }
-  if(IniFile_Write(pCfg->store.iniFile,pCfg->caPath))
+  if((iRc=IniFile_Write(pCfg->store.iniFile,pCfg->caPath)) != INI_ERR_NONE)
   {
-    ERR_PRINT_VARGS("Failed to store inifile \"%s\"",pCfg->caPath);
-    return(-1);
+    INI_PRINT_ERROR("IniFile_Write",iRc);
+    switch(iRc)
+    {
+      case INI_ERR_PARAM:
+        return(APPCFG_ERR_PARAM);
+      case INI_ERR_IO:
+        return(APPCFG_ERR_IO);
+      case INI_ERR_INTERNAL:
+      default:
+        return(APPCFG_ERR_INTERNAL);
+    }
   }
-  return(0);
+  return(APPCFG_ERR_NONE);
 }
 
-INLINE_FCT int iAppConfig_AssembleDestFolderPath_m(AppConfig pCfg,
+INLINE_FCT void vAppConfig_Ini_Close_m(AppConfig pCfg)
+{
+  IniFile_Dispose(pCfg->store.iniFile);
+}
+
+INLINE_FCT int iAppConfig_AssembleDestFolderPath_m(char *pcOutPath,
                                                    unsigned int *puiBufSize,
                                                    const char *pcAppName,
                                                    const char *pcFileName,
@@ -225,50 +427,42 @@ INLINE_FCT int iAppConfig_AssembleDestFolderPath_m(AppConfig pCfg,
 {
   unsigned int uiTmp;
   if(!pcAppName) /* Appname must be specified */
-    return(-1);
+    return(APPCFG_ERR_PARAM);
 
   if(!pcLocation)
   {
     uiTmp=*puiBufSize;
-    if(iAppConfig_GetDefaultConfigPath_m(pCfg->caPath,
+    if(iAppConfig_GetDefaultConfigPath_m(pcOutPath,
                                          &uiTmp))
     {
       ERR_PRINT("iAppConfig_GetDefaultPath_m() failed");
-      return(-1);
+      return(APPCFG_ERR_INTERNAL);
     }
   }
   else
   {
     if((uiTmp=strlen(pcLocation)+1) > *puiBufSize-2)
-      return(-1);
-    memcpy(pCfg->caPath,pcLocation,uiTmp);
+      return(APPCFG_ERR_PARAM);
+    memcpy(pcOutPath,pcLocation,uiTmp);
   }
   /* Check if buffer is big enough to hold the whole path */
   if(uiTmp+strlen(pcAppName)+strlen(pcFileName) > (*puiBufSize)-2)
   {
     ERR_PRINT("Buffer for path too small, would exceed");
-    return(-1);
+    return(APPCFG_ERR_PARAM);
   }
-  if(pCfg->caPath[uiTmp-2] != PATH_SEPARATOR) /* Add path separator if needed */
-    pCfg->caPath[uiTmp-1]=PATH_SEPARATOR;
+  if(pcOutPath[uiTmp-2] != PATH_SEPARATOR) /* Add path separator if needed */
+    pcOutPath[uiTmp-1]=PATH_SEPARATOR;
 
-  strcpy(&pCfg->caPath[uiTmp],pcAppName);
-  uiTmp=strlen(pCfg->caPath);
-  if(pCfg->caPath[uiTmp-1] != PATH_SEPARATOR) /* Add path separator if needed */
+  strcpy(&pcOutPath[uiTmp],pcAppName);
+  uiTmp=strlen(pcOutPath);
+  if(pcOutPath[uiTmp-1] != PATH_SEPARATOR) /* Add path separator if needed */
   {
-    pCfg->caPath[uiTmp++]=PATH_SEPARATOR;
-    pCfg->caPath[uiTmp]='\0';
+    pcOutPath[uiTmp++]=PATH_SEPARATOR;
+    pcOutPath[uiTmp]='\0';
   }
-  *puiBufSize=uiTmp;
-  return(0);
-}
-
-INLINE_FCT int iAppConfig_Create_m(AppConfig pCfg)
-{
-  if(IniFile_New(&pCfg->store.iniFile,INI_OPT_CASE_SENSITIVE))
-    return(-1);
-
-  return(0);
+  *puiBufSize=uiTmp+1;
+  return(APPCFG_ERR_NONE);
 }
 
 INLINE_FCT int iAppConfig_GetDefaultConfigPath_m(char *pcPath,

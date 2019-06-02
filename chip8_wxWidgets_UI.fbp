@@ -119,6 +119,19 @@
                         <property name="shortcut"></property>
                         <property name="unchecked_bitmap"></property>
                     </object>
+                    <object class="wxMenuItem" expanded="1">
+                        <property name="bitmap"></property>
+                        <property name="checked">0</property>
+                        <property name="enabled">1</property>
+                        <property name="help"></property>
+                        <property name="id">MainWindow_FileEmuReset</property>
+                        <property name="kind">wxITEM_NORMAL</property>
+                        <property name="label">Reset</property>
+                        <property name="name">menuItemEmuReset</property>
+                        <property name="permission">none</property>
+                        <property name="shortcut"></property>
+                        <property name="unchecked_bitmap"></property>
+                    </object>
                 </object>
                 <object class="wxMenu" expanded="1">
                     <property name="label">Options</property>
@@ -129,6 +142,19 @@
                         <property name="label">Speed</property>
                         <property name="name">smenuSpeed</property>
                         <property name="permission">protected</property>
+                        <object class="wxMenuItem" expanded="1">
+                            <property name="bitmap"></property>
+                            <property name="checked">0</property>
+                            <property name="enabled">1</property>
+                            <property name="help"></property>
+                            <property name="id">MainWindow_EmuSpeed_0_25</property>
+                            <property name="kind">wxITEM_CHECK</property>
+                            <property name="label">x0.25</property>
+                            <property name="name">menuItemSpeed0_25</property>
+                            <property name="permission">protected</property>
+                            <property name="shortcut"></property>
+                            <property name="unchecked_bitmap"></property>
+                        </object>
                         <object class="wxMenuItem" expanded="0">
                             <property name="bitmap"></property>
                             <property name="checked">0</property>
@@ -181,12 +207,64 @@
                             <property name="shortcut"></property>
                             <property name="unchecked_bitmap"></property>
                         </object>
+                        <object class="wxMenuItem" expanded="1">
+                            <property name="bitmap"></property>
+                            <property name="checked">0</property>
+                            <property name="enabled">1</property>
+                            <property name="help"></property>
+                            <property name="id">MainWindow_EmuSpeed_5_0</property>
+                            <property name="kind">wxITEM_CHECK</property>
+                            <property name="label">x5</property>
+                            <property name="name">menuItemSpeed5_0</property>
+                            <property name="permission">protected</property>
+                            <property name="shortcut"></property>
+                            <property name="unchecked_bitmap"></property>
+                        </object>
+                        <object class="wxMenuItem" expanded="1">
+                            <property name="bitmap"></property>
+                            <property name="checked">0</property>
+                            <property name="enabled">1</property>
+                            <property name="help"></property>
+                            <property name="id">MainWindow_EmuSpeed_10_0</property>
+                            <property name="kind">wxITEM_CHECK</property>
+                            <property name="label">x10</property>
+                            <property name="name">menuItemSpeed10_0</property>
+                            <property name="permission">protected</property>
+                            <property name="shortcut"></property>
+                            <property name="unchecked_bitmap"></property>
+                        </object>
                     </object>
                     <object class="submenu" expanded="1">
                         <property name="bitmap"></property>
                         <property name="label">Quirks</property>
                         <property name="name">smenuQuirks</property>
                         <property name="permission">protected</property>
+                        <object class="wxMenuItem" expanded="1">
+                            <property name="bitmap"></property>
+                            <property name="checked">0</property>
+                            <property name="enabled">1</property>
+                            <property name="help"></property>
+                            <property name="id">MainWindow_Quirk_Instr_Ignore_Unknown</property>
+                            <property name="kind">wxITEM_CHECK</property>
+                            <property name="label">[All] Ignore(=Skip) Unknown Instructions</property>
+                            <property name="name">menuItemQuirk_InstrIgnoreUnknown</property>
+                            <property name="permission">protected</property>
+                            <property name="shortcut"></property>
+                            <property name="unchecked_bitmap"></property>
+                        </object>
+                        <object class="wxMenuItem" expanded="1">
+                            <property name="bitmap"></property>
+                            <property name="checked">0</property>
+                            <property name="enabled">1</property>
+                            <property name="help"></property>
+                            <property name="id">MainWindow_Quirk_Instr_Ignore_Invalid</property>
+                            <property name="kind">wxITEM_CHECK</property>
+                            <property name="label">[All] Ignore(=Skip) Invalid Instructions</property>
+                            <property name="name">menuItemQuirk_InstrIgnoreInvalid</property>
+                            <property name="permission">protected</property>
+                            <property name="shortcut"></property>
+                            <property name="unchecked_bitmap"></property>
+                        </object>
                         <object class="wxMenuItem" expanded="1">
                             <property name="bitmap"></property>
                             <property name="checked">0</property>
@@ -252,7 +330,7 @@
                         <property name="help"></property>
                         <property name="id">MainWindow_About</property>
                         <property name="kind">wxITEM_NORMAL</property>
-                        <property name="label">About...</property>
+                        <property name="label">&amp;About&#x09;F1</property>
                         <property name="name">menuItemAbout</property>
                         <property name="permission">none</property>
                         <property name="shortcut"></property>
@@ -292,7 +370,7 @@
                 <property name="permission">protected</property>
             </object>
         </object>
-        <object class="Frame" expanded="1">
+        <object class="Frame" expanded="0">
             <property name="aui_managed">0</property>
             <property name="aui_manager_style">wxAUI_MGR_DEFAULT</property>
             <property name="bg"></property>
@@ -319,7 +397,7 @@
             <property name="window_name"></property>
             <property name="window_style">wxTAB_TRAVERSAL</property>
             <property name="xrc_skip_sizer">1</property>
-            <object class="wxFlexGridSizer" expanded="1">
+            <object class="wxFlexGridSizer" expanded="0">
                 <property name="cols">4</property>
                 <property name="flexible_direction">wxBOTH</property>
                 <property name="growablecols"></property>

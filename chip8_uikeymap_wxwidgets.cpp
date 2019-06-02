@@ -246,6 +246,7 @@ wxWinKeyMap::wxWinKeyMap(wxWindow* parent,
   chEmuKeyF->SetSelection( 0 );
   layMain->Add( chEmuKeyF, 0, wxRIGHT|wxLEFT, 5 );
 
+  this->vPopulateControls();
 
   this->SetSizer( layMain );
   this->Layout();

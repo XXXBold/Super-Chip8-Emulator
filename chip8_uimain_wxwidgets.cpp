@@ -7,25 +7,38 @@
 #include "chip8_uimain_wxwidgets.h"
 #include "chip8_app_wxwidgets.h"
 #include "chip8_emulator.h"
-#include "appconfig.h"
+
+#include "license.h"
+
+#ifdef __linux__
+  #include "chip8_logo.xpm"
+#endif /* __linux__ */
 
 enum
 {
   // menu items
-  MainWindow_FileLoad                     = 1,
+  MainWindow_FileLoad                           = 1,
   MainWindow_FileEmuRun,
   MainWindow_FileEmuPause,
+  MainWindow_FileEmuReset,
   MainWindow_StatusBar,
-  MainWindow_About                        = wxID_ABOUT,
+  MainWindow_About                              = wxID_ABOUT,
 
-  MainWindow_EmuSpeed_0_5                 = 10,
-  MainWindow_EmuSpeed_1_0                 = 11,
-  MainWindow_EmuSpeed_1_5                 = 12,
-  MainWindow_EmuSpeed_2_0                 = 13,
-  MainWindow_Quirk_LD_Increment_REG_I     = 15,
-  MainWindow_Quirk_Shift_Source_REG       = 16,
-  MainWindow_Keymap                       = 20,
-  MainWindow_DumpScreen
+  MainWindow_Quirk_LD_Increment_REG_I           = 10,
+  MainWindow_Quirk_Shift_Source_REG,
+  MainWindow_Quirk_Instr_Ignore_Unknown,
+  MainWindow_Quirk_Instr_Ignore_Invalid,
+  MainWindow_Keymap,
+  MainWindow_DumpScreen,
+
+  SPEED_ENUM_OFFSET                             = 20,
+  MainWindow_EmuSpeed_0_25                      = EMU_SPEED_0_25X+SPEED_ENUM_OFFSET,
+  MainWindow_EmuSpeed_0_5,
+  MainWindow_EmuSpeed_1_0,
+  MainWindow_EmuSpeed_1_5,
+  MainWindow_EmuSpeed_2_0,
+  MainWindow_EmuSpeed_5_0,
+  MainWindow_EmuSpeed_10_0,
 };
 
 enum /* Other IDs */
@@ -41,40 +54,37 @@ bool browseForFile(bool openFile,
                    const wxString &defaultPath=wxEmptyString);
 
 wxBEGIN_EVENT_TABLE(wxWinMain,wxFrame)
-EVT_MENU(MainWindow_About,                        wxWinMain::OnAbout)
-EVT_MENU(MainWindow_FileLoad,                     wxWinMain::OnFileLoad)
-EVT_MENU(MainWindow_FileEmuRun,                   wxWinMain::OnEmuStateSetRun)
-EVT_MENU(MainWindow_FileEmuPause,                 wxWinMain::OnEmuStateSetPause)
+EVT_MENU(MainWindow_About,                             wxWinMain::OnAbout)
+EVT_MENU(MainWindow_FileLoad,                          wxWinMain::OnFileLoad)
+EVT_MENU(MainWindow_FileEmuRun,                        wxWinMain::OnEmuStateSetRun)
+EVT_MENU(MainWindow_FileEmuPause,                      wxWinMain::OnEmuStateSetPause)
+EVT_MENU(MainWindow_FileEmuReset,                      wxWinMain::OnEmuReset)
 
-EVT_MENU(MainWindow_EmuSpeed_0_5,                 wxWinMain::OnSetSpeed_0_5)
-EVT_MENU(MainWindow_EmuSpeed_1_0,                 wxWinMain::OnSetSpeed_1_0)
-EVT_MENU(MainWindow_EmuSpeed_1_5,                 wxWinMain::OnSetSpeed_1_5)
-EVT_MENU(MainWindow_EmuSpeed_2_0,                 wxWinMain::OnSetSpeed_2_0)
+EVT_MENU(MainWindow_EmuSpeed_0_25,                     wxWinMain::OnSetSpeed)
+EVT_MENU(MainWindow_EmuSpeed_0_5,                      wxWinMain::OnSetSpeed)
+EVT_MENU(MainWindow_EmuSpeed_1_0,                      wxWinMain::OnSetSpeed)
+EVT_MENU(MainWindow_EmuSpeed_1_5,                      wxWinMain::OnSetSpeed)
+EVT_MENU(MainWindow_EmuSpeed_2_0,                      wxWinMain::OnSetSpeed)
+EVT_MENU(MainWindow_EmuSpeed_5_0,                      wxWinMain::OnSetSpeed)
+EVT_MENU(MainWindow_EmuSpeed_10_0,                     wxWinMain::OnSetSpeed)
 
-EVT_MENU(MainWindow_Quirk_LD_Increment_REG_I,     wxWinMain::OnQuirkChange)
-EVT_MENU(MainWindow_Quirk_Shift_Source_REG,       wxWinMain::OnQuirkChange)
+/* Quirks */
+EVT_MENU(MainWindow_Quirk_Instr_Ignore_Unknown,        wxWinMain::OnQuirkChange)
+EVT_MENU(MainWindow_Quirk_Instr_Ignore_Invalid,        wxWinMain::OnQuirkChange)
+EVT_MENU(MainWindow_Quirk_LD_Increment_REG_I,          wxWinMain::OnQuirkChange)
+EVT_MENU(MainWindow_Quirk_Shift_Source_REG,            wxWinMain::OnQuirkChange)
 
-EVT_MENU(MainWindow_Keymap,                       wxWinMain::OnConfigureKeymap)
-EVT_MENU(MainWindow_DumpScreen,                   wxWinMain::OnDumpScreen)
+EVT_MENU(MainWindow_Keymap,                            wxWinMain::OnConfigureKeymap)
+EVT_MENU(MainWindow_DumpScreen,                        wxWinMain::OnDumpScreen)
 
 //EVT_MOVE_END(                                     wxWinMain::OnWindowMove)
 
-EVT_TIMER(MainWindow_TimerID,                     wxWinMain::OnTimerTick)
+EVT_TIMER(MainWindow_TimerID,                          wxWinMain::OnTimerTick)
 
-EVT_THREAD(wxEVT_COMMAND_TEXT_UPDATED,  wxWinMain::OnEmuCBThread)
+EVT_THREAD(wxEVT_COMMAND_TEXT_UPDATED,                 wxWinMain::OnEmuCBThread)
 
 EVT_CLOSE(wxWinMain::OnClose)
 wxEND_EVENT_TABLE()
-
-
-bool wxWinMain::Show(bool show)
-{
-  if(show)
-  {
-    this->tTimer.Start(200);
-  }
-  return(wxFrame::Show(show));
-}
 
 wxWinMain::wxWinMain(wxWindow* parent,
                      wxWindowID id,
@@ -100,11 +110,18 @@ wxWinMain::wxWinMain(wxWindow* parent,
   menuItemEmuPause = new wxMenuItem( menuFile, MainWindow_FileEmuPause, wxString( wxT("Set Pause") ) , wxEmptyString, wxITEM_NORMAL );
   menuFile->Append( menuItemEmuPause );
 
+  wxMenuItem* menuItemEmuReset;
+  menuItemEmuReset = new wxMenuItem( menuFile, MainWindow_FileEmuReset, wxString( wxT("Reset") ) , wxEmptyString, wxITEM_NORMAL );
+  menuFile->Append( menuItemEmuReset );
+
   mbarMain->Append( menuFile, wxT("File") );
 
   menuOptions = new wxMenu();
   smenuSpeed = new wxMenu();
   wxMenuItem* smenuSpeedItem = new wxMenuItem( menuOptions, wxID_ANY, wxT("Speed"), wxEmptyString, wxITEM_NORMAL, smenuSpeed );
+  menuItemSpeed0_25 = new wxMenuItem( smenuSpeed, MainWindow_EmuSpeed_0_25, wxString( wxT("x0.25") ) , wxEmptyString, wxITEM_CHECK );
+  smenuSpeed->Append( menuItemSpeed0_25 );
+
   menuItemSpeed0_5 = new wxMenuItem( smenuSpeed, MainWindow_EmuSpeed_0_5, wxString( wxT("x0.5") ) , wxEmptyString, wxITEM_CHECK );
   smenuSpeed->Append( menuItemSpeed0_5 );
 
@@ -117,10 +134,22 @@ wxWinMain::wxWinMain(wxWindow* parent,
   menuItemSpeed2_0 = new wxMenuItem( smenuSpeed, MainWindow_EmuSpeed_2_0, wxString( wxT("x2.0") ) , wxEmptyString, wxITEM_CHECK );
   smenuSpeed->Append( menuItemSpeed2_0 );
 
+  menuItemSpeed5_0 = new wxMenuItem( smenuSpeed, MainWindow_EmuSpeed_5_0, wxString( wxT("x5") ) , wxEmptyString, wxITEM_CHECK );
+  smenuSpeed->Append( menuItemSpeed5_0 );
+
+  menuItemSpeed10_0 = new wxMenuItem( smenuSpeed, MainWindow_EmuSpeed_10_0, wxString( wxT("x10") ) , wxEmptyString, wxITEM_CHECK );
+  smenuSpeed->Append( menuItemSpeed10_0 );
+
   menuOptions->Append( smenuSpeedItem );
 
   smenuQuirks = new wxMenu();
   wxMenuItem* smenuQuirksItem = new wxMenuItem( menuOptions, wxID_ANY, wxT("Quirks"), wxEmptyString, wxITEM_NORMAL, smenuQuirks );
+  menuItemQuirk_InstrIgnoreUnknown = new wxMenuItem( smenuQuirks, MainWindow_Quirk_Instr_Ignore_Unknown, wxString( wxT("[All] Ignore(=Skip) Unknown Instructions") ) , wxEmptyString, wxITEM_CHECK );
+  smenuQuirks->Append( menuItemQuirk_InstrIgnoreUnknown );
+
+  menuItemQuirk_InstrIgnoreInvalid = new wxMenuItem( smenuQuirks, MainWindow_Quirk_Instr_Ignore_Invalid, wxString( wxT("[All] Ignore(=Skip) Invalid Instructions") ) , wxEmptyString, wxITEM_CHECK );
+  smenuQuirks->Append( menuItemQuirk_InstrIgnoreInvalid );
+
   menuItemQuirk_LDIncrementRegI = new wxMenuItem( smenuQuirks, MainWindow_Quirk_LD_Increment_REG_I, wxString( wxT("[0xFX55,0xFX65] Increment Reg. I on LD") ) , wxEmptyString, wxITEM_CHECK );
   smenuQuirks->Append( menuItemQuirk_LDIncrementRegI );
 
@@ -141,7 +170,7 @@ wxWinMain::wxWinMain(wxWindow* parent,
 
   menuHelp = new wxMenu();
   wxMenuItem* menuItemAbout;
-  menuItemAbout = new wxMenuItem( menuHelp, MainWindow_About, wxString( wxT("About...") ) , wxEmptyString, wxITEM_NORMAL );
+  menuItemAbout = new wxMenuItem( menuHelp, MainWindow_About, wxString( wxT("&About\tF1") ) , wxEmptyString, wxITEM_NORMAL );
   menuHelp->Append( menuItemAbout );
 
   mbarMain->Append( menuHelp, wxT("Help") );
@@ -153,52 +182,111 @@ wxWinMain::wxWinMain(wxWindow* parent,
 
   this->Centre( wxBOTH );
 
-  this->pWinKeymap=new wxWinKeyMap(this,wxID_ANY,"Edit Keymap");
+  this->Centre( wxBOTH );
+
+  /* Loaded in ressource file (.rc) (Windows), linux: included above */
+  this->appIcon=wxICON(chip8_logo);
 }
 
 wxWinMain::~wxWinMain()
 {
-  if(appConfig_Save(wxGetApp().appCfg))
-  {
-    wxMessageBox("appConfig_Save() failed, can't store your configuration!\n"
-                 "Config File Path is: \n"
-                 "\"" + wxString::FromAscii(appConfig_GetPath(wxGetApp().appCfg)) + "\"",
-                 "Failed to save configuration",
-                 wxOK | wxCENTER | wxICON_EXCLAMATION,
-                 this);
-  }
-  appConfig_Close(wxGetApp().appCfg);
   this->Destroy();
 }
 
-void wxWinMain::OnSetSpeed_0_5(wxCommandEvent& WXUNUSED(event))
+bool wxWinMain::Show(bool show)
 {
-  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  this->OptionSetSpeed(EMU_SPEED_0_5X);
+  if(show)
+  {
+#ifdef __WXGTK__ /* GTK+ has a native control for licenses */
+    this->wAbout.SetLicense(ucaLicense_m);
+#else /* Shorten License text for non-native controls */
+    this->wAbout.SetLicense(wxString::FromAscii(ucaLicense_m).Left(250) +
+                            "...\n"
+                            "Check out the Homepage for full License!");
+#endif
+    this->wAbout.SetIcon(this->appIcon);
+    this->wAbout.SetName(APP_DISPLAY_NAME);
+    this->wAbout.SetVersion(wxString::Format("Version %d.%d.%d (%s)\n"
+                                             "%s (%s)",
+                                             APP_VERSION_MAJOR,
+                                             APP_VERSION_MINOR,
+                                             APP_VERSION_PATCH,
+                                             APP_VERSION_DEVSTATE,
+                                             APP_VERSION_BUILDTIME,
+                                             APP_VERSION_ARCH));
+    this->wAbout.SetDescription("Welcome to this Emulator!\n"
+                                "Here you can Emulate Chip-8 and Superchip ROMs.\n"
+                                "Check out the Website for more Information and Updates.\n");
+    this->wAbout.SetCopyright("(C) 2018-2019 by XXXBold");
+    this->wAbout.SetWebSite(APP_PROJECT_HOMEPAGE);
+    this->wAbout.AddDeveloper(APP_PROJECT_DEVELOPER);
+
+    this->SetIcon(this->appIcon);
+    this->pWinKeymap=new wxWinKeyMap(this,wxID_ANY,"Edit Keymap");
+    this->menuItemSpeed1_0->Check(true);
+    this->tTimer.Start(200);
+  }
+  return(wxFrame::Show(show));
 }
 
-void wxWinMain::OnSetSpeed_1_0(wxCommandEvent& WXUNUSED(event))
+void wxWinMain::OnSetSpeed(wxCommandEvent& event)
 {
+  int iCurrSpeed;
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  this->OptionSetSpeed(EMU_SPEED_1_0X);
-}
 
-void wxWinMain::OnSetSpeed_1_5(wxCommandEvent& WXUNUSED(event))
-{
-  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  this->OptionSetSpeed(EMU_SPEED_1_5X);
-}
+  iCurrSpeed=event.GetId()-SPEED_ENUM_OFFSET;
 
-void wxWinMain::OnSetSpeed_2_0(wxCommandEvent& WXUNUSED(event))
-{
-  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  this->OptionSetSpeed(EMU_SPEED_2_0X);
+  this->menuItemSpeed0_25->Check(false);
+  this->menuItemSpeed0_5->Check(false);
+  this->menuItemSpeed1_0->Check(false);
+  this->menuItemSpeed1_5->Check(false);
+  this->menuItemSpeed2_0->Check(false);
+  this->menuItemSpeed5_0->Check(false);
+  this->menuItemSpeed10_0->Check(false);
+
+  DEBUG_WXPUTS(wxString::Format("Set speed to %d",iCurrSpeed));
+  switch(iCurrSpeed)
+  {
+    case EMU_SPEED_0_25X:
+      this->menuItemSpeed0_25->Check(true);
+      break;
+    case EMU_SPEED_0_5X:
+      this->menuItemSpeed0_5->Check(true);
+      break;
+    case EMU_SPEED_1_0X:
+      this->menuItemSpeed1_0->Check(true);
+      break;
+    case EMU_SPEED_1_5X:
+      this->menuItemSpeed1_5->Check(true);
+      break;
+    case EMU_SPEED_2_0X:
+      this->menuItemSpeed2_0->Check(true);
+      break;
+    case EMU_SPEED_5_0X:
+      this->menuItemSpeed5_0->Check(true);
+      break;
+    case EMU_SPEED_10_0X:
+      this->menuItemSpeed10_0->Check(true);
+      break;
+    default:
+      DEBUG_WXPUTS("Failed to set speed, unknown value! reset to 1.0...");
+      iCurrSpeed=EMU_SPEED_1_0X;
+      this->menuItemSpeed1_0->Check(true);
+      break;
+  }
+  chip8_SetEmulationSpeed(static_cast<EEmulationSpeed>(iCurrSpeed));
 }
 
 void wxWinMain::OnQuirkChange(wxCommandEvent& WXUNUSED(event))
 {
   unsigned int uiQuirks=0;
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
+
+  if(this->menuItemQuirk_InstrIgnoreUnknown->IsChecked())
+    uiQuirks|=EMU_QUIRK_SKIP_INSTRUCTIONS_UNKNOWN;
+  if(this->menuItemQuirk_InstrIgnoreInvalid->IsChecked())
+    uiQuirks|=EMU_QUIRK_SKIP_INSTRUCTIONS_INVALID;
+
   if(this->menuItemQuirk_LDIncrementRegI->IsChecked())
     uiQuirks|=EMU_QUIRK_INCREMENT_I_ON_STORAGE;
   if(this->menuItemQuirk_ShiftSourceReg->IsChecked())
@@ -216,29 +304,12 @@ void wxWinMain::OnConfigureKeymap(wxCommandEvent& WXUNUSED(event))
 void wxWinMain::OnDumpScreen(wxCommandEvent& WXUNUSED(event))
 {
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  chip8_DumpScreen();
+  chip8_DumpScreen(stderr);
 }
 
 void wxWinMain::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
-  wxAboutDialogInfo wAbout;
   DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-
-  wAbout.SetName(APP_DISPLAY_NAME);
-  wAbout.SetVersion(wxString::Format("Version %d.%d.%d (%s)\n"
-                                     "%s",
-                                     APP_VERSION_MAJOR,
-                                     APP_VERSION_MINOR,
-                                     APP_VERSION_PATCH,
-                                     APP_VERSION_DEVSTATE,
-                                     APP_VERSION_BUILDTIME));
-  wAbout.SetDescription("Welcome to this Emulator!\n"
-                        "Here you can Emulate Chip-8 and Superchip Games.\n"
-                        "Check out the Website for more Information and Updates.\n");
-  wAbout.SetCopyright("(C) 2018-2019 by XXXBold");
-  wAbout.SetWebSite(APP_PROJECT_HOMEPAGE);
-  wAbout.AddDeveloper(APP_PROJECT_DEVELOPER);
-
   wxAboutBox(wAbout,this);
 }
 
@@ -266,7 +337,7 @@ void wxWinMain::OnFileLoad(wxCommandEvent& WXUNUSED(event))
     }
     else
     {
-      this->statusBar->SetStatusText("Load file: " + strPath,1);
+      this->statusBar->SetStatusText("Load file: "+strPath.AfterLast(wxFILE_SEP_PATH),1);
       chip8_SetWindowTitle(strPath.ToAscii());
       wxGetApp().vApp_SetLastLoadPath(strPath);
     }
@@ -290,6 +361,11 @@ void wxWinMain::OnEmuStateSetPause(wxCommandEvent& WXUNUSED(event))
 void wxWinMain::OnEmuStateSetRun(wxCommandEvent& WXUNUSED(event))
 {
   chip8_SetPause(0);
+}
+
+void wxWinMain::OnEmuReset(wxCommandEvent& WXUNUSED(event))
+{
+  chip8_Reset();
 }
 
 void wxWinMain::OnClose(wxCloseEvent& WXUNUSED(event))
@@ -318,27 +394,40 @@ void wxWinMain::OnEmuCBThread(wxThreadEvent& event)
       break;
 
     case EMU_EVT_SUCHIP_INSTRUCTION_EXECUTED:
-      wxPuts("SUPERCHIP INSTRUCTION!");
+      DEBUG_WXPUTS("SUPERCHIP INSTRUCTION!");
       break;
 
-    case EMU_EVT_INSTRUCTION_UNKNOWN:
-      wxMessageBox(wxString::Format("Instruction unknown, OPCode: 0x%.4X!",tagData.tOpCode),
+    case EMU_EVT_PROGRAM_EXIT:
+      DEBUG_WXPUTS("END OF PROGRAM REACHED");
+      break;
+
+    case EMU_EVT_ERR_INSTRUCTION_UNKNOWN:
+      wxMessageBox(wxString::Format("Instruction unknown, OPCode: 0x%.4X",tagData.tOpCode),
                    "Emulation Error",
                    wxOK | wxCENTER | wxICON_EXCLAMATION,
                    this);
       chip8_SetWindowVisible(0);
       break;
 
-    case EMU_EVT_INSTRUCTION_ERROR:
-      wxMessageBox(wxString::Format("Instruction Error, can't process OPCode: 0x%.4X!",tagData.tOpCode),
+    case EMU_EVT_ERR_INVALID_INSTRUCTION:
+      wxMessageBox(wxString::Format("Instruction Error, can't process OPCode: 0x%.4X",tagData.tOpCode),
                    "Emulation Error",
                    wxOK | wxCENTER | wxICON_EXCLAMATION,
+                   this);
+      chip8_SetWindowVisible(0);
+      break;
+
+    case EMU_EVT_ERR_INTERNAL:
+      wxMessageBox(wxString::Format("Internal Error occured, last OPCode: 0x%.4X\n"
+                                    "This should not happen, please report this issue.",tagData.tOpCode),
+                   "Emulation Error",
+                   wxOK | wxCENTER | wxICON_ERROR,
                    this);
       chip8_SetWindowVisible(0);
       break;
 
     default:
-      wxPuts("Unknown ThreadEvent!");
+      DEBUG_WXPUTS("Unknown ThreadEvent!");
       break;
   }
 }
@@ -357,8 +446,14 @@ void wxWinMain::OnTimerTick(wxTimerEvent& WXUNUSED(event))
     case EMU_STATE_INACTIVE:
       this->statusBar->SetStatusText(strStatus + "INACTIVE",0);
       break;
-    case EMU_STATE_ERROR_INSTRUCTION:
+    case EMU_STATE_ERR_INVALID_INSTRUCTION:
       this->statusBar->SetStatusText(strStatus + "ERROR IN INSTRUCTION",0);
+      break;
+    case EMU_STATE_ERR_UNKNOWN_INSTRUCTION:
+      this->statusBar->SetStatusText(strStatus + "UNKNOWN INSTRUCTION",0);
+      break;
+    case EMU_STATE_ERR_INTERNAL:
+      this->statusBar->SetStatusText(strStatus + "INTERNAL ERROR",0);
       break;
     case EMU_STATE_QUIT:
       this->statusBar->SetStatusText(strStatus + "QUIT",0);
@@ -384,35 +479,6 @@ void wxWinMain::GetClientPosOnScreen(int *piPosX, int *piPosY)
   *piPosX=tagRect.GetX();
   *piPosY=tagRect.GetY();
   this->ClientToScreen(piPosX,piPosY);
-}
-
-void wxWinMain::OptionSetSpeed(int idCurrSpeed)
-{
-  DEBUG_WXPUTS(__PRETTY_FUNCTION__);
-  this->menuItemSpeed0_5->Check(false);
-  this->menuItemSpeed1_0->Check(false);
-  this->menuItemSpeed1_5->Check(false);
-  this->menuItemSpeed2_0->Check(false);
-
-  switch(idCurrSpeed)
-  {
-    case EMU_SPEED_0_5X:
-      this->menuItemSpeed0_5->Check(true);
-      chip8_SetEmulationSpeed(EMU_SPEED_0_5X);
-      break;
-    case EMU_SPEED_1_0X:
-      this->menuItemSpeed1_0->Check(true);
-      chip8_SetEmulationSpeed(EMU_SPEED_1_0X);
-      break;
-    case EMU_SPEED_1_5X:
-      this->menuItemSpeed1_5->Check(true);
-      chip8_SetEmulationSpeed(EMU_SPEED_1_5X);
-      break;
-    case EMU_SPEED_2_0X:
-      this->menuItemSpeed2_0->Check(true);
-      chip8_SetEmulationSpeed(EMU_SPEED_2_0X);
-      break;
-  }
 }
 
 bool browseForFile(bool openFile,

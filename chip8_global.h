@@ -11,10 +11,10 @@
 #include "chip8_public.h"
 
 /* Enable/disable trace here as needed */
-  #define TRACE_DEBUG_INFO
+//#define TRACE_DEBUG_INFO
   #define TRACE_DEBUG_ERROR
-  #define TRACE_CHIP8_INSTRUCTIONS
-  #define TRACE_SUCHIP_INSTRUCTIONS
+//#define TRACE_CHIP8_INSTRUCTIONS
+//#define TRACE_SUCHIP_INSTRUCTIONS
 
 /**
  * Global available macros
@@ -85,18 +85,26 @@ typedef enum
 
 enum RetCodes /* Return codes from chip8_Process */
 {
-  RET_CHIP8_OPCODE_OK=0,
-  RET_SUCHIP_OPCODE_OK,
-  RET_PGM_EXIT,
-  RET_ERR_INVALID_JUMP_ADDRESS,
-  RET_ERR_MEM_WOULD_OVERFLOW,
-  RET_ERR_FONT_OUT_OF_INDEX,
-  RET_ERR_DRAW_OUT_OF_SCREEN,
-  RET_ERR_SCREEN_DRAW,
-  RET_ERR_STACK_MAX_CALLS,
-  RET_ERR_STACK_ON_TOP,
-  RET_ERR_KEYCODE_INVALID,
-  RET_ERR_INSTRUCTION_UNKNOWN,
+  RET_ERR_NONE                  =0x0,
+  RET_ERR_INVALID_JUMP_ADDRESS  =0x1,
+  RET_ERR_MEM_WOULD_OVERFLOW    =0x2,
+  RET_ERR_FONT_OUT_OF_INDEX     =0x4,
+  RET_ERR_DRAW_OUT_OF_SCREEN    =0x8,
+  RET_ERR_SCREEN_DRAW           =0x10,
+  RET_ERR_STACK_MAX_CALLS       =0x20,
+  RET_ERR_STACK_ON_TOP          =0x40,
+  RET_ERR_KEYCODE_INVALID       =0x80,
+
+  RET_ERR_INSTRUCTION_UNKNOWN   =0x100,
+
+  RET_ERROR_MASK                =0x3FF, /* 10 bits reserved for error codes */
+
+  RET_END_OF_MEMORY             =0x800,
+
+  RET_PGM_EXIT                  =0x2000,
+
+  RET_CHIP8_OPCODE              =0x8000,
+  RET_SUCHIP_OPCODE             =0x4000,
 };
 
 /**
@@ -152,7 +160,7 @@ enum RetCodes /* Return codes from chip8_Process */
  * | (reserved)       |                |
  * |                  |                |
  * |------------------| 0x1FF (511)----|
- * | Data             |                |-- 0x200 (512) - 0xE9F (3743)
+ * | Data             |                |-- 0x200 (512) - 0xFFF (4095)
  * |                  |                |-- Used for Programs
  * |------------------| 0xFFF (4095)---|
  *
@@ -224,6 +232,9 @@ struct TagEmulator_T
   }updateSettings;
   word tCurrOPCode;
   byte taChipMemory[OFF_MEM_SIZE];
+  byte taFileLoaded[OFF_MEM_SIZE-OFF_ADDR_USER_START];
+  word tFileStartIndex;
+  word tFileSize;
   unsigned int uiQuirks;
   struct TagWindow_T
   {
@@ -298,6 +309,10 @@ extern TagEmulator tagEmulator_g;
 #define REG_VD        tagEmulator_g.taChipMemory[OFF_REG_VD]
 #define REG_VE        tagEmulator_g.taChipMemory[OFF_REG_VE]
 #define REG_VF        tagEmulator_g.taChipMemory[OFF_REG_VF]
+#ifdef ENABLE_SUPERCHIP_INSTRUCTIONS
+  #define REG_RPL0    tagEmulator_g.taChipMemory[OFF_REG_RPL_START]
+  #define REG_RPLX(index) tagEmulator_g.taChipMemory[OFF_REG_RPL_START+(index)]
+#endif /* ENABLE_SUPERCHIP_INSTRUCTIONS */
 
 
 #ifdef TRACE_DEBUG_INFO
