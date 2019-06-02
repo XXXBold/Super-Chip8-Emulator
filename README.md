@@ -16,6 +16,7 @@ For Ubuntu/debian based distros, install dependencies as follows (maybe some oth
 - 0.2-beta: Added Superchip instructions
 - 0.3-beta: Added support for linux, changed renderer
 - 0.3.1-beta: Bugfix, Register VF is now set correctly
+- 0.4-beta: Improved Superchip support (Should now be fully functional), added more Quirks, added Icon & show it properly, added license. For Linux: Updated to wxWidgets based on GTK3. If upgrading from a previous version, check keymapping, it will change at first launch of this version.
 
 ## TODOs
 - Add build instructions
