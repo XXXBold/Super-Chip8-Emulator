@@ -1,4 +1,4 @@
-# Chip8Emulator
+# Super-Chip8-Emulator
 Emulator for Chip-8 Applications using SDL2 and wxWidgets.
 
 Current status: WIP, tested on Windows, Beta release binary available for Windows (64-bit).
