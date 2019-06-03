@@ -1,7 +1,7 @@
 # Super-Chip8-Emulator
-Emulator for Chip-8 Applications using SDL2 and wxWidgets.
+Emulator for (Super)Chip-8 Applications using SDL2 and wxWidgets.
 
-Current status: WIP, tested on Windows, Beta release binary available for Windows (64-bit).
+Current status: Chip8+Superchip instruction set fully implemented, tested on Windows+Linux, Beta release binary available for Windows & Linux (both 64-bit).
 
 For getting some roms, refer to e.g. https://github.com/dmatlack/chip8/tree/master/roms or turn on your prefered search engine to tell you where's more ;)
 
